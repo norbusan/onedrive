@@ -1,0 +1,19 @@
+Source: onedrive
+Section: net
+Priority: optional
+Maintainer: Norbert Preining <preining@debian.org>
+Build-Depends: libcurl4-gnutls-dev, libsqlite3-dev, ldc, debhelper (>= 7)
+Standards-Version: 3.9.8
+Homepage: http://skilion.github.io/onedrive/
+Vcs-Git: git://anonscm.debian.org/users/preining/onedrive.git
+Vcs-Browser: http://anonscm.debian.org/cgit/users/preining/onedrive.git
+
+Package: onedrive
+Section: net
+Priority: optional
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: folder synchronization with OneDrive
+ OneDrive is the cloud storage system of Microsoft. This package provides
+ the command line client specialising in synchronizing with OneDrive cloud 
+ storage.

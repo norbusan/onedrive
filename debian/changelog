@@ -1,0 +1,5 @@
+onedrive (1.1.20161012-1) unstable; urgency=medium
+
+  * First release (Closes: #830946)
+
+ -- Norbert Preining <preining@debian.org>  Wed, 12 Oct 2016 13:39:59 +0900
