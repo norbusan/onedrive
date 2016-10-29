@@ -1,8 +1,9 @@
-onedrive (1.1.20161012-2) UNRELEASED; urgency=medium
+onedrive (1.1.20161012-2) unstable; urgency=medium
 
-  * add patch to fix service file
+  * add patch to fix service file, and install it into right place
+    (Closes: #842426) (Thanks to Alam Arias)
 
- -- Norbert Preining <preining@debian.org>  Sat, 29 Oct 2016 14:18:00 +0900
+ -- Norbert Preining <preining@debian.org>  Sat, 29 Oct 2016 14:55:42 +0900
 
 onedrive (1.1.20161012-1) unstable; urgency=medium
 
