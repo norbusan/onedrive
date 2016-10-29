@@ -2,8 +2,8 @@
  Makefile |   17 ++++++-----------
  1 file changed, 6 insertions(+), 11 deletions(-)
 
---- onedrive.orig/Makefile
-+++ onedrive/Makefile
+--- onedrive.git.orig/Makefile
++++ onedrive.git/Makefile
 @@ -1,7 +1,6 @@
 -DC = dmd
 +DC = ldmd2
@@ -14,7 +14,7 @@
  
  SOURCES = \
  	src/config.d \
-@@ -27,11 +26,7 @@
+@@ -28,11 +27,7 @@
  	rm -f onedrive.o onedrive
  
  install: onedrive onedrive.conf
