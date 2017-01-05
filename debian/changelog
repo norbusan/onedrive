@@ -1,3 +1,9 @@
+onedrive (1.1.20170106-1) unstable; urgency=medium
+
+  * new checkout from git
+
+ -- Norbert Preining <preining@debian.org>  Fri, 06 Jan 2017 00:44:46 +0900
+
 onedrive (1.1.20161012-2) unstable; urgency=medium
 
   * add patch to fix service file, and install it into right place
