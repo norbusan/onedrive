@@ -9,24 +9,35 @@ private immutable {
 	string authUrl = "https://login.live.com/oauth20_authorize.srf";
 	string redirectUrl = "https://login.live.com/oauth20_desktop.srf"; // "urn:ietf:wg:oauth:2.0:oob";
 	string tokenUrl = "https://login.live.com/oauth20_token.srf";
+	string driveUrl = "https://api.onedrive.com/v1.0/drive";
 	string itemByIdUrl = "https://api.onedrive.com/v1.0/drive/items/";
 	string itemByPathUrl = "https://api.onedrive.com/v1.0/drive/root:/";
 }
 
 class OneDriveException: Exception
 {
-	// HTTP status code
-	int code;
+	int httpStatusCode;
+	// https://dev.onedrive.com/misc/errors.htm
+	JSONValue error;
 
     @nogc @safe pure nothrow this(string msg, Throwable next, string file = __FILE__, size_t line = __LINE__)
     {
         super(msg, file, line, next);
     }
 
-	@safe pure this(int code, string reason, string file = __FILE__, size_t line = __LINE__)
+	@safe pure this(int httpStatusCode, string reason, string file = __FILE__, size_t line = __LINE__)
 	{
-		this.code = code;
-		string msg = format("HTTP request returned status code %d (%s)", code, reason);
+		this.httpStatusCode = httpStatusCode;
+		this.error = error;
+		string msg = format("HTTP request returned status code %d (%s)", httpStatusCode, reason);
+		super(msg, file, line, next);
+	}
+
+	this(int httpStatusCode, string reason, ref const JSONValue error, string file = __FILE__, size_t line = __LINE__)
+	{
+		this.httpStatusCode = httpStatusCode;
+		this.error = error;
+		string msg = format("HTTP request returned status code %d (%s)\n%s", httpStatusCode, reason, toJSON(error, true));
 		super(msg, file, line, next);
 	}
 }
@@ -51,8 +62,15 @@ final class OneDriveApi
 	{
 		try {
 			refreshToken = readText(cfg.refreshTokenFilePath);
+			getDefaultDrive();
 		} catch (FileException e) {
 			return authorize();
+		} catch (OneDriveException e) {
+			if (e.httpStatusCode == 400 || e.httpStatusCode == 401) {
+				log.log("Refresh token invalid");
+				return authorize();
+			}
+			throw e;
 		}
 		return true;
 	}
@@ -74,6 +92,13 @@ final class OneDriveApi
 		c.popFront(); // skip the whole match
 		redeemToken(c.front);
 		return true;
+	}
+
+	// https://dev.onedrive.com/drives/default.htm
+	JSONValue getDefaultDrive()
+	{
+		checkAccessTokenExpired();
+		return get(driveUrl);
 	}
 
 	// https://dev.onedrive.com/items/view_delta.htm
@@ -134,13 +159,15 @@ final class OneDriveApi
 	{
 		checkAccessTokenExpired();
 		char[] url = itemByIdUrl ~ id;
-		if (eTag) http.addRequestHeader("If-Match", eTag);
+		//TODO: investigate why this always fail with 412 (Precondition Failed)
+		//if (eTag) http.addRequestHeader("If-Match", eTag);
 		del(url);
 	}
 
 	// https://dev.onedrive.com/items/create.htm
 	JSONValue createByPath(const(char)[] parentPath, JSONValue item)
 	{
+		checkAccessTokenExpired();
 		string url = itemByPathUrl ~ encodeComponent(parentPath) ~ ":/children";
 		http.addRequestHeader("Content-Type", "application/json");
 		return post(url, item.toString());
@@ -234,7 +261,7 @@ final class OneDriveApi
 		http.url = url;
 		addAccessTokenHeader();
 		auto response = perform();
-		checkHttpCode();
+		checkHttpCode(response);
 		return response;
 	}
 
@@ -244,8 +271,8 @@ final class OneDriveApi
 		http.method = HTTP.Method.del;
 		http.url = url;
 		addAccessTokenHeader();
-		perform();
-		checkHttpCode();
+		auto response = perform();
+		checkHttpCode(response);
 	}
 
 	private void download(const(char)[] url, string filename)
@@ -270,7 +297,7 @@ final class OneDriveApi
 		http.url = url;
 		addAccessTokenHeader();
 		auto response = perform(patchData);
-		checkHttpCode();
+		checkHttpCode(response);
 		return response;
 	}
 
@@ -281,7 +308,7 @@ final class OneDriveApi
 		http.url = url;
 		addAccessTokenHeader();
 		auto response = perform(postData);
-		checkHttpCode();
+		checkHttpCode(response);
 		return response;
 	}
 
@@ -300,7 +327,7 @@ final class OneDriveApi
 		http.onSend = data => file.rawRead(data).length;
 		http.contentLength = file.size;
 		auto response = perform();
-		checkHttpCode();
+		checkHttpCode(response);
 		return response;
 	}
 
@@ -346,6 +373,13 @@ final class OneDriveApi
 	{
 		if (http.statusLine.code / 100 != 2) {
 			throw new OneDriveException(http.statusLine.code, http.statusLine.reason);
+		}
+	}
+
+	private void checkHttpCode(ref const JSONValue response)
+	{
+		if (http.statusLine.code / 100 != 2) {
+			throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 		}
 	}
 }

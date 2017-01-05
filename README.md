@@ -26,8 +26,12 @@ sudo apt-get update && sudo apt-get install dmd-bin
 ```
 
 ### Installation
-1. `make`
-2. `sudo make install`
+```
+git clone git@github.com:skilion/onedrive.git
+cd onedrive
+make
+sudo make install
+```
 
 ### Configuration:
 You should copy the default config file into your home directory before making changes:
@@ -50,7 +54,7 @@ Use `|` to separate multiple patterns.
 [3]: https://technet.microsoft.com/en-us/library/bb490639.aspx
 
 ### First run
-The first time you run the program you will be asked to sign in. The procedure require a web browser.
+The first time you run the program you will be asked to sign in. The procedure requires a web browser.
 
 ### Service
 If you want to sync your files automatically, enable and start the systemd service:

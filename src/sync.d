@@ -56,7 +56,7 @@ final class SyncEngine
 	// list of items to skip while applying the changes
 	private string[] skippedItems;
 	// list of items to delete after the changes has been downloaded
-	private string[] pathsToDelete;
+	private string[] idsToDelete;
 
 	this(Config cfg, OneDriveApi onedrive, ItemDatabase itemdb)
 	{
@@ -91,13 +91,25 @@ final class SyncEngine
 		try {
 			JSONValue changes;
 			do {
-				changes = onedrive.viewChangesByPath("/", statusToken);
+				// get changes from the server
+				try {
+					changes = onedrive.viewChangesByPath("/", statusToken);
+				} catch (OneDriveException e) {
+					if (e.httpStatusCode == 410) {
+						log.log("Status token expired, resyncing");
+						statusToken = null;
+						continue;
+					}
+					else {
+						throw e;
+					}
+				}
 				foreach (item; changes["value"].array) {
 					applyDifference(item);
 				}
 				statusToken = changes["@delta.token"].str;
 				std.file.write(cfg.statusTokenFilePath, statusToken);
-			} while (("@odata.nextLink" in changes.object) !is null);
+			} while (!((changes.type == JSON_TYPE.OBJECT) && (("@odata.nextLink" in changes) is null)));
 		} catch (ErrnoException e) {
 			throw new SyncException(e.msg, e);
 		} catch (FileException e) {
@@ -105,8 +117,8 @@ final class SyncEngine
 		} catch (OneDriveException e) {
 			throw new SyncException(e.msg, e);
 		}
-		// delete items in pathsToDelete
-		if (pathsToDelete.length > 0) deleteItems();
+		// delete items in idsToDelete
+		if (idsToDelete.length > 0) deleteItems();
 		// empty the skipped items
 		skippedItems.length = 0;
 		assumeSafeAppend(skippedItems);
@@ -154,10 +166,7 @@ final class SyncEngine
 		ItemType type;
 		if (isItemDeleted(item)) {
 			log.vlog("The item is marked for deletion");
-			if (cached) {
-				itemdb.deleteById(id);
-				pathsToDelete ~= oldPath;
-			}
+			if (cached) idsToDelete ~= id;
 			return;
 		} else if (isItemFile(item)) {
 			type = ItemType.file;
@@ -178,17 +187,6 @@ final class SyncEngine
 			return;
 		}
 
-		string cTag;
-		try {
-			cTag = item["cTag"].str;
-		} catch (JSONException e) {
-			// cTag is not returned if the Item is a folder
-			// https://dev.onedrive.com/resources/item.htm
-			cTag = "";
-		}
-
-		string mtime = item["fileSystemInfo"]["lastModifiedDateTime"].str;
-
 		string crc32;
 		if (type == ItemType.file) {
 			try {
@@ -203,8 +201,8 @@ final class SyncEngine
 			name: name,
 			type: type,
 			eTag: eTag,
-			cTag: cTag,
-			mtime: SysTime.fromISOExtString(mtime),
+			cTag: "cTag" in item ? item["cTag"].str : null,
+			mtime: SysTime.fromISOExtString(item["fileSystemInfo"]["lastModifiedDateTime"].str),
 			parentId: parentId,
 			crc32: crc32
 		};
@@ -217,9 +215,9 @@ final class SyncEngine
 
 		// save the item in the db
 		if (oldItem.id) {
-			itemdb.update(id, name, type, eTag, cTag, mtime, parentId, crc32);
+			itemdb.update(newItem);
 		} else {
-			itemdb.insert(id, name, type, eTag, cTag, mtime, parentId, crc32);
+			itemdb.insert(newItem);
 		}
 	}
 
@@ -282,8 +280,6 @@ final class SyncEngine
 		case ItemType.file:
 			if (isFile(path)) {
 				SysTime localModifiedTime = timeLastModified(path);
-				import core.time: Duration;
-				item.mtime.fracSecs = Duration.zero; // HACK
 				if (localModifiedTime == item.mtime) {
 					return true;
 				} else {
@@ -312,7 +308,9 @@ final class SyncEngine
 	private void deleteItems()
 	{
 		log.vlog("Deleting files ...");
-		foreach_reverse (path; pathsToDelete) {
+		foreach_reverse (id; idsToDelete) {
+			string path = itemdb.computePath(id);
+			itemdb.deleteById(id);
 			if (exists(path)) {
 				if (isFile(path)) {
 					remove(path);
@@ -327,8 +325,8 @@ final class SyncEngine
 				}
 			}
 		}
-		pathsToDelete.length = 0;
-		assumeSafeAppend(pathsToDelete);
+		idsToDelete.length = 0;
+		assumeSafeAppend(idsToDelete);
 	}
 
 	// scan the given directory for differences
@@ -400,8 +398,6 @@ final class SyncEngine
 		if (exists(path)) {
 			if (isFile(path)) {
 				SysTime localModifiedTime = timeLastModified(path);
-				import core.time: Duration;
-				item.mtime.fracSecs = Duration.zero; // HACK
 				if (localModifiedTime != item.mtime) {
 					log.vlog("The file last modified time has changed");
 					string id = item.id;
@@ -497,7 +493,7 @@ final class SyncEngine
 		try {
 			onedrive.deleteById(item.id, item.eTag);
 		} catch (OneDriveException e) {
-			if (e.code == 404) log.log(e.msg);
+			if (e.httpStatusCode == 404) log.log(e.msg);
 			else throw e;
 		}
 		itemdb.deleteById(item.id);
@@ -514,31 +510,34 @@ final class SyncEngine
 		saveItem(res);
 	}
 
-	private void saveItem(JSONValue item)
+	private void saveItem(JSONValue jsonItem)
 	{
-		string id = item["id"].str;
+		string id = jsonItem["id"].str;
 		ItemType type;
-		if (isItemFile(item)) {
+		if (isItemFile(jsonItem)) {
 			type = ItemType.file;
-		} else if (isItemFolder(item)) {
+		} else if (isItemFolder(jsonItem)) {
 			type = ItemType.dir;
 		} else {
 			assert(0);
 		}
-		string name = item["name"].str;
-		string eTag = item["eTag"].str;
-		string cTag = item["cTag"].str;
-		string mtime = item["fileSystemInfo"]["lastModifiedDateTime"].str;
-		string parentId = item["parentReference"]["id"].str;
-		string crc32;
+		Item item = {
+			id: id,
+			name: jsonItem["name"].str,
+			type: type,
+			eTag: jsonItem["eTag"].str,
+			cTag: "cTag" in jsonItem ? jsonItem["cTag"].str : null,
+			mtime: SysTime.fromISOExtString(jsonItem["fileSystemInfo"]["lastModifiedDateTime"].str),
+			parentId: jsonItem["parentReference"]["id"].str
+		};
 		if (type == ItemType.file) {
 			try {
-				crc32 = item["file"]["hashes"]["crc32Hash"].str;
+				item.crc32 = jsonItem["file"]["hashes"]["crc32Hash"].str;
 			} catch (JSONException e) {
-				// swallow exception
+				log.vlog("The hash is not available");
 			}
 		}
-		itemdb.upsert(id, name, type, eTag, cTag, mtime, parentId, crc32);
+		itemdb.upsert(item);
 	}
 
 	void uploadMoveItem(string from, string to)
@@ -575,7 +574,7 @@ final class SyncEngine
 		try {
 			uploadDeleteItem(item, path);
 		} catch (OneDriveException e) {
-			if (e.code == 404) log.log(e.msg);
+			if (e.httpStatusCode == 404) log.log(e.msg);
 			else throw e;
 		}
 	}

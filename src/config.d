@@ -16,7 +16,7 @@ final class Config
 	{
 		refreshTokenFilePath = configDirName ~ "/refresh_token";
 		statusTokenFilePath = configDirName ~ "/status_token";
-		databaseFilePath = configDirName ~ "/items.db";
+		databaseFilePath = configDirName ~ "/items.sqlite3";
 		uploadStateFilePath = configDirName ~ "/resume_upload";
 		userConfigFilePath = configDirName ~ "/config";
 	}
@@ -37,6 +37,16 @@ final class Config
 			return *p;
 		} else {
 			throw new Exception("Missing config value: " ~ key);
+		}
+	}
+
+	string getValue(string key, string value)
+	{
+		auto p = key in values;
+		if (p) {
+			return *p;
+		} else {
+			return value;
 		}
 	}
 
@@ -65,4 +75,5 @@ unittest
 	auto cfg = new Config("");
 	cfg.load("onedrive.conf");
 	assert(cfg.getValue("sync_dir") == "~/OneDrive");
+	assert(cfg.getValue("empty", "default") == "default");
 }

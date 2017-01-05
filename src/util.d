@@ -1,6 +1,7 @@
 import std.conv;
 import std.digest.crc;
 import std.file;
+import std.net.curl;
 import std.path;
 import std.regex;
 import std.socket;
@@ -81,11 +82,25 @@ Regex!char wild2regex(const(char)[] pattern)
 // return true if the network connection is available
 bool testNetwork()
 {
-	try {
-		auto addr = new InternetAddress("login.live.com", 443);
-		auto socket = new TcpSocket(addr);
-		return socket.isAlive();
-	} catch (SocketException) {
-		return false;
+	HTTP http = HTTP("https://login.live.com");
+	http.method = HTTP.Method.head;
+	return http.perform(ThrowOnError.no) == 0;
+}
+
+// call globMatch for each string in pattern separated by '|'
+bool multiGlobMatch(const(char)[] path, const(char)[] pattern)
+{
+	foreach (glob; pattern.split('|')) {
+		if (globMatch!(std.path.CaseSensitive.yes)(path, glob)) {
+			return true;
+		}
 	}
+	return false;
+}
+
+unittest
+{
+	assert(multiGlobMatch(".hidden", ".*"));
+	assert(multiGlobMatch(".hidden", "file|.*"));
+	assert(!multiGlobMatch("foo.bar", "foo|bar"));
 }
