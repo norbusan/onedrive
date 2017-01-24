@@ -1,8 +1,9 @@
 onedrive (1.1.20170106-1) unstable; urgency=medium
 
   * new checkout from git
+  * allow building with ldmd2
 
- -- Norbert Preining <preining@debian.org>  Fri, 06 Jan 2017 00:44:46 +0900
+ -- Norbert Preining <preining@debian.org>  Tue, 24 Jan 2017 11:31:22 +0900
 
 onedrive (1.1.20161012-2) unstable; urgency=medium
 
