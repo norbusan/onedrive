@@ -1,0 +1,24 @@
+---
+ Makefile       |    2 +-
+ src/onedrive.d |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+--- onedrive.git.orig/Makefile
++++ onedrive.git/Makefile
+@@ -1,4 +1,4 @@
+-DC = dmd
++DC = ldmd2
+ DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl
+ CONFDIR = /etc
+ 
+--- onedrive.git.orig/src/onedrive.d
++++ onedrive.git/src/onedrive.d
+@@ -37,7 +37,7 @@
+ 	{
+ 		this.httpStatusCode = httpStatusCode;
+ 		this.error = error;
+-		string msg = format("HTTP request returned status code %d (%s)\n%s", httpStatusCode, reason, toJSON(error, true));
++		string msg = format("HTTP request returned status code %d (%s)\n%s", httpStatusCode, reason, toJSON(&error, true));
+ 		super(msg, file, line, next);
+ 	}
+ }

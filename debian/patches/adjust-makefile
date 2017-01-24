@@ -1,12 +1,11 @@
 ---
- Makefile |   17 ++++++-----------
- 1 file changed, 6 insertions(+), 11 deletions(-)
+ Makefile |   15 +++++----------
+ 1 file changed, 5 insertions(+), 10 deletions(-)
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
 @@ -1,7 +1,6 @@
--DC = dmd
-+DC = ldmd2
+ DC = dmd
  DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl
 -DESTDIR = /usr/local/bin
 -CONFDIR = /usr/local/etc
