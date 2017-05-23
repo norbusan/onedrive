@@ -1,31 +1,27 @@
 ---
- Makefile |   15 +++++----------
- 1 file changed, 5 insertions(+), 10 deletions(-)
+ Makefile |    9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -1,7 +1,6 @@
+@@ -1,6 +1,5 @@
  DC = dmd
  DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl
 -DESTDIR = /usr/local/bin
--CONFDIR = /usr/local/etc
-+CONFDIR = /etc
  
  SOURCES = \
  	src/config.d \
-@@ -28,11 +27,7 @@
+@@ -28,9 +27,9 @@
  	rm -f onedrive.o onedrive
  
- install: onedrive onedrive.conf
+ install: onedrive onedrive.service
 -	install onedrive $(DESTDIR)/onedrive
--	install -m 644 onedrive.conf $(CONFDIR)/onedrive.conf
 -	install -m 644 onedrive.service /usr/lib/systemd/user
--
--uninstall:
--	rm -f $(DESTDIR)/onedrive
--	rm -f $(CONFDIR)/onedrive.conf
--	rm -f /usr/lib/systemd/user/onedrive.service
 +	install onedrive $(DESTDIR)/usr/bin/onedrive
-+	install -m 644 onedrive.conf $(DESTDIR)/etc/onedrive.conf
-+	install -m 644 onedrive.service $(DESTDIR)/lib/systemd/user
-+
++	install -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user
+ 
+ uninstall:
+-	rm -f $(DESTDIR)/onedrive
+-	rm -f /usr/lib/systemd/user/onedrive.service
++	rm -f $(DESTDIR)/usr/bin/onedrive
++	rm -f $(DESTDIR)/lib/systemd/user

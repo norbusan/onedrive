@@ -1,7 +1,6 @@
 ---
- Makefile         |    2 +-
  onedrive.service |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 --- onedrive.git.orig/onedrive.service
 +++ onedrive.git/onedrive.service
@@ -14,12 +13,3 @@
  Restart=no
  
  [Install]
---- onedrive.git.orig/Makefile
-+++ onedrive.git/Makefile
-@@ -29,5 +29,5 @@
- install: onedrive onedrive.conf
- 	install onedrive $(DESTDIR)/usr/bin/onedrive
- 	install -m 644 onedrive.conf $(DESTDIR)/etc/onedrive.conf
--	install -m 644 onedrive.service $(DESTDIR)/lib/systemd/user
-+	install -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user
- 

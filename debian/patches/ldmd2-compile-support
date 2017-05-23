@@ -9,11 +9,11 @@
 -DC = dmd
 +DC = ldmd2
  DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl
- CONFDIR = /etc
  
+ SOURCES = \
 --- onedrive.git.orig/src/onedrive.d
 +++ onedrive.git/src/onedrive.d
-@@ -37,7 +37,7 @@
+@@ -38,7 +38,7 @@
  	{
  		this.httpStatusCode = httpStatusCode;
  		this.error = error;
