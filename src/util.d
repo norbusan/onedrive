@@ -55,7 +55,7 @@ Regex!char wild2regex(const(char)[] pattern)
 {
 	string str;
 	str.reserve(pattern.length + 2);
-	str ~= "/";
+	str ~= "^";
 	foreach (c; pattern) {
 		switch (c) {
 		case '*':
@@ -68,7 +68,7 @@ Regex!char wild2regex(const(char)[] pattern)
 			str ~= "[^/]";
 			break;
 		case '|':
-			str ~= "$|/";
+			str ~= "$|^";
 			break;
 		default:
 			str ~= c;
@@ -82,7 +82,7 @@ Regex!char wild2regex(const(char)[] pattern)
 // return true if the network connection is available
 bool testNetwork()
 {
-	HTTP http = HTTP("https://login.live.com");
+	HTTP http = HTTP("https://login.microsoftonline.com");
 	http.method = HTTP.Method.head;
 	return http.perform(ThrowOnError.no) == 0;
 }

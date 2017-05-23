@@ -22,7 +22,7 @@ struct Item
 final class ItemDatabase
 {
 	// increment this for every change in the db schema
-	immutable int itemDatabaseVersion = 2;
+	immutable int itemDatabaseVersion = 3;
 
 	Database db;
 	Statement insertItemStmt;
@@ -38,7 +38,7 @@ final class ItemDatabase
 				id       TEXT NOT NULL PRIMARY KEY,
 				name     TEXT NOT NULL,
 				type     TEXT NOT NULL,
-				eTag     TEXT NOT NULL,
+				eTag     TEXT,
 				cTag     TEXT,
 				mtime    TEXT NOT NULL,
 				parentId TEXT,
@@ -114,7 +114,8 @@ final class ItemDatabase
 
 	bool selectByPath(const(char)[] path, out Item item)
 	{
-		path = "root/" ~ path.chompPrefix("."); // HACK
+		// prefix with the root dir
+		path = "root/" ~ path.chompPrefix(".");
 
 		// initialize the search
 		string[2][] candidates; // [id, parentId]
@@ -240,8 +241,7 @@ final class ItemDatabase
 				else path = r.front[0].idup;
 			} else {
 				// root
-				if (path) path = "./" ~ path;
-				else path = ".";
+				if (!path) path = ".";
 				break;
 			}
 			id = r.front[1].dup;

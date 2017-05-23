@@ -1,25 +1,34 @@
+import std.algorithm;
+import std.net.curl: CurlTimeoutException;
 import std.exception: ErrnoException;
-import std.algorithm, std.datetime, std.file, std.json, std.path, std.regex;
+import std.datetime, std.file, std.json, std.path;
+import std.regex;
 import std.stdio, std.string;
-import config, itemdb, onedrive, upload, util;
+import config, itemdb, onedrive, selective, upload, util;
 static import log;
 
 // threshold after which files will be uploaded using an upload session
-private long thresholdFileSize = 10 * 2^^20; // 10 MiB
+private long thresholdFileSize = 4 * 2^^20; // 4 MiB
 
 private bool isItemFolder(const ref JSONValue item)
 {
-	return (("folder" in item.object) !is null);
+	return ("folder" in item) != null;
 }
 
 private bool isItemFile(const ref JSONValue item)
 {
-	return (("file" in item.object) !is null);
+	return ("file" in item) != null;
 }
 
 private bool isItemDeleted(const ref JSONValue item)
 {
-	return (("deleted" in item.object) !is null);
+	// HACK: fix for https://github.com/skilion/onedrive/issues/157
+	return ("deleted" in item) || ("fileSystemInfo" !in item);
+}
+
+private bool isItemRoot(const ref JSONValue item)
+{
+	return ("root" in item) != null;
 }
 
 private bool testCrc32(string path, const(char)[] crc32)
@@ -49,8 +58,8 @@ final class SyncEngine
 	private Config cfg;
 	private OneDriveApi onedrive;
 	private ItemDatabase itemdb;
-	private Regex!char skipDir, skipFile;
 	private UploadSession session;
+	private SelectiveSync selectiveSync;
 	// token representing the last status correctly synced
 	private string statusToken;
 	// list of items to skip while applying the changes
@@ -58,14 +67,13 @@ final class SyncEngine
 	// list of items to delete after the changes has been downloaded
 	private string[] idsToDelete;
 
-	this(Config cfg, OneDriveApi onedrive, ItemDatabase itemdb)
+	this(Config cfg, OneDriveApi onedrive, ItemDatabase itemdb, SelectiveSync selectiveSync)
 	{
-		assert(onedrive && itemdb);
+		assert(onedrive && itemdb && selectiveSync);
 		this.cfg = cfg;
 		this.onedrive = onedrive;
 		this.itemdb = itemdb;
-		skipDir = wild2regex(cfg.getValue("skip_dir"));
-		skipFile = wild2regex(cfg.getValue("skip_file"));
+		this.selectiveSync = selectiveSync;
 		session = UploadSession(onedrive, cfg.uploadStateFilePath);
 	}
 
@@ -93,7 +101,7 @@ final class SyncEngine
 			do {
 				// get changes from the server
 				try {
-					changes = onedrive.viewChangesByPath("/", statusToken);
+					changes = onedrive.viewChangesByPath(".", statusToken);
 				} catch (OneDriveException e) {
 					if (e.httpStatusCode == 410) {
 						log.log("Status token expired, resyncing");
@@ -107,12 +115,20 @@ final class SyncEngine
 				foreach (item; changes["value"].array) {
 					applyDifference(item);
 				}
-				statusToken = changes["@delta.token"].str;
+				// hack to reuse old code
+				string url;
+				if ("@odata.nextLink" in changes) url = changes["@odata.nextLink"].str;
+				if ("@odata.deltaLink" in changes) url = changes["@odata.deltaLink"].str;
+				auto c = matchFirst(url, r"(?:token=)([\w\d]+)");
+				c.popFront(); // skip the whole match
+				statusToken = c.front;
 				std.file.write(cfg.statusTokenFilePath, statusToken);
-			} while (!((changes.type == JSON_TYPE.OBJECT) && (("@odata.nextLink" in changes) is null)));
+			} while ("@odata.nextLink" in changes);
 		} catch (ErrnoException e) {
 			throw new SyncException(e.msg, e);
 		} catch (FileException e) {
+			throw new SyncException(e.msg, e);
+		} catch (CurlTimeoutException e) {
 			throw new SyncException(e.msg, e);
 		} catch (OneDriveException e) {
 			throw new SyncException(e.msg, e);
@@ -128,21 +144,27 @@ final class SyncEngine
 	{
 		string id = item["id"].str;
 		string name = item["name"].str;
-		string eTag = item["eTag"].str;
-		string parentId = item["parentReference"]["id"].str;
 
-		// HACK: recognize the root directory
-		if (name == "root" && parentId[$ - 1] == '0' && parentId[$ - 2] == '!') {
-			parentId = null;
+		log.vlog(id, " ", name);
+
+		// eTag and parentId do not exists for the root in OneDrive Biz
+		string eTag, parentId;
+		if (!isItemRoot(item)) {
+			eTag = item["eTag"].str;
+			parentId = item["parentReference"]["id"].str;
 		}
 
 		// skip unwanted items early
 		if (skippedItems.find(parentId).length != 0) {
+			log.vlog("Filtered out");
 			skippedItems ~= id;
 			return;
 		}
-
-		log.vlog(id, " ", name);
+		if (selectiveSync.isNameExcluded(name)) {
+			log.vlog("Filtered out");
+			skippedItems ~= id;
+			return;
+		}
 
 		// rename the local item if it is unsynced and there is a new version of it
 		Item oldItem;
@@ -157,30 +179,30 @@ final class SyncEngine
 			}
 		}
 
-		// compute the path of the item
-		string path = ".";
-		if (parentId) {
-			path = itemdb.computePath(parentId) ~ "/" ~ name;
-		}
-
-		ItemType type;
+		// check if the item is to be deleted
 		if (isItemDeleted(item)) {
 			log.vlog("The item is marked for deletion");
 			if (cached) idsToDelete ~= id;
 			return;
-		} else if (isItemFile(item)) {
-			type = ItemType.file;
-			if (!path.matchFirst(skipFile).empty) {
-				log.vlog("Filtered out");
-				return;
-			}
-		} else if (isItemFolder(item)) {
-			type = ItemType.dir;
-			if (!path.matchFirst(skipDir).empty) {
-				log.vlog("Filtered out");
+		}
+
+		// compute the path of the item
+		string path = ".";
+		if (parentId) {
+			path = itemdb.computePath(parentId) ~ "/" ~ name;
+			// selective sync
+			if (selectiveSync.isPathExcluded(path)) {
+				log.vlog("Filtered out: ", path);
 				skippedItems ~= id;
 				return;
 			}
+		}
+
+		ItemType type;
+		if (isItemFile(item)) {
+			type = ItemType.file;
+		} else if (isItemFolder(item)) {
+			type = ItemType.dir;
 		} else {
 			log.vlog("The item is neither a file nor a directory, skipping");
 			skippedItems ~= id;
@@ -280,6 +302,9 @@ final class SyncEngine
 		case ItemType.file:
 			if (isFile(path)) {
 				SysTime localModifiedTime = timeLastModified(path);
+				// HACK: reduce time resolution to seconds before comparing
+				item.mtime.fracSecs = Duration.zero;
+				localModifiedTime.fracSecs = Duration.zero;
 				if (localModifiedTime == item.mtime) {
 					return true;
 				} else {
@@ -352,20 +377,23 @@ final class SyncEngine
 	private void uploadDifferences(Item item)
 	{
 		log.vlog(item.id, " ", item.name);
+
+		// skip filtered items
+		if (selectiveSync.isNameExcluded(item.name)) {
+			log.vlog("Filtered out");
+			return;
+		}
 		string path = itemdb.computePath(item.id);
+		if (selectiveSync.isPathExcluded(path)) {
+			log.vlog("Filtered out: ", path);
+			return;
+		}
+
 		final switch (item.type) {
 		case ItemType.dir:
-			if (!path.matchFirst(skipDir).empty) {
-				log.vlog("Filtered out");
-				break;
-			}
 			uploadDirDifferences(item, path);
 			break;
 		case ItemType.file:
-			if (!path.matchFirst(skipFile).empty) {
-				log.vlog("Filtered out");
-				break;
-			}
 			uploadFileDifferences(item, path);
 			break;
 		}
@@ -398,6 +426,9 @@ final class SyncEngine
 		if (exists(path)) {
 			if (isFile(path)) {
 				SysTime localModifiedTime = timeLastModified(path);
+				// HACK: reduce time resolution to seconds before comparing
+				item.mtime.fracSecs = Duration.zero;
+				localModifiedTime.fracSecs = Duration.zero;
 				if (localModifiedTime != item.mtime) {
 					log.vlog("The file last modified time has changed");
 					string id = item.id;
@@ -435,26 +466,35 @@ final class SyncEngine
 
 	private void uploadNewItems(string path)
 	{
+		// skip unexisting symbolic links
 		if (isSymlink(path) && !exists(readLink(path))) {
 			return;
 		}
+
+		// skip filtered items
+		if (path != ".") {
+			if (selectiveSync.isNameExcluded(baseName(path))) {
+				return;
+			}
+			if (selectiveSync.isPathExcluded(path)) {
+				return;
+			}
+		}
+
 		if (isDir(path)) {
-			if (path.matchFirst(skipDir).empty) {
-				Item item;
-				if (!itemdb.selectByPath(path, item)) {
-					uploadCreateDir(path);
-				}
-				auto entries = dirEntries(path, SpanMode.shallow, false);
-				foreach (DirEntry entry; entries) {
-					uploadNewItems(entry.name);
-				}
+			Item item;
+			if (!itemdb.selectByPath(path, item)) {
+				uploadCreateDir(path);
+			}
+			// recursively traverse children
+			auto entries = dirEntries(path, SpanMode.shallow, false);
+			foreach (DirEntry entry; entries) {
+				uploadNewItems(entry.name);
 			}
 		} else {
-			if (path.matchFirst(skipFile).empty) {
-				Item item;
-				if (!itemdb.selectByPath(path, item)) {
-					uploadNewFile(path);
-				}
+			Item item;
+			if (!itemdb.selectByPath(path, item)) {
+				uploadNewFile(path);
 			}
 		}
 	}
@@ -464,7 +504,7 @@ final class SyncEngine
 		log.log("Creating remote directory: ", path);
 		JSONValue item = ["name": baseName(path).idup];
 		item["folder"] = parseJSON("{}");
-		auto res = onedrive.createByPath(path.dirName ~ "/", item);
+		auto res = onedrive.createByPath(path.dirName, item);
 		saveItem(res);
 	}
 
@@ -477,7 +517,6 @@ final class SyncEngine
 		} else {
 			response = session.upload(path, path);
 		}
-		saveItem(response);
 		string id = response["id"].str;
 		string cTag = response["cTag"].str;
 		SysTime mtime = timeLastModified(path).toUTC();
@@ -512,7 +551,6 @@ final class SyncEngine
 
 	private void saveItem(JSONValue jsonItem)
 	{
-		string id = jsonItem["id"].str;
 		ItemType type;
 		if (isItemFile(jsonItem)) {
 			type = ItemType.file;
@@ -522,7 +560,7 @@ final class SyncEngine
 			assert(0);
 		}
 		Item item = {
-			id: id,
+			id: jsonItem["id"].str,
 			name: jsonItem["name"].str,
 			type: type,
 			eTag: jsonItem["eTag"].str,
