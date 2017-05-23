@@ -1,3 +1,9 @@
+onedrive (1.1.20170523-1) unstable; urgency=medium
+
+  * new checkout from git
+
+ -- Norbert Preining <preining@debian.org>  Tue, 23 May 2017 20:26:56 +0900
+
 onedrive (1.1.20170106-1) unstable; urgency=medium
 
   * new checkout from git
