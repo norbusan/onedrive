@@ -1,6 +1,5 @@
-DC = dmd
-DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl
-DESTDIR = /usr/local/bin
+DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl -J.
+PREFIX = /usr/local
 
 SOURCES = \
 	src/config.d \
@@ -9,28 +8,37 @@ SOURCES = \
 	src/main.d \
 	src/monitor.d \
 	src/onedrive.d \
+	src/qxor.d \
 	src/selective.d \
 	src/sqlite.d \
 	src/sync.d \
 	src/upload.d \
 	src/util.d
 
-onedrive: $(SOURCES)
-	$(DC) -O -release -inline -boundscheck=off $(DFLAGS) $(SOURCES)
-
-debug: $(SOURCES)
-	$(DC) -debug -g -gs $(DFLAGS) $(SOURCES)
-
-unittest: $(SOURCES)
-	$(DC) -unittest -debug -g -gs $(DFLAGS) $(SOURCES)
+all: onedrive onedrive.service
 
 clean:
-	rm -f onedrive.o onedrive
+	rm -f onedrive onedrive.o onedrive.service
 
-install: onedrive onedrive.service
-	install onedrive $(DESTDIR)/onedrive
-	install -m 644 onedrive.service /usr/lib/systemd/user
+debug: version $(SOURCES)
+	dmd -debug -g -gs $(DFLAGS) $(SOURCES)
+
+install: all
+	install -D onedrive $(DESTDIR)$(PREFIX)/bin/onedrive
+	install -D -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user/onedrive.service
+
+onedrive: version $(SOURCES)
+	dmd -g -inline -O -release $(DFLAGS) $(SOURCES)
+
+onedrive.service:
+	sed "s|@PREFIX@|$(PREFIX)|g" onedrive.service.in > onedrive.service
+
+unittest: $(SOURCES)
+	dmd -debug -g -gs -unittest $(DFLAGS) $(SOURCES)
 
 uninstall:
-	rm -f $(DESTDIR)/onedrive
-	rm -f /usr/lib/systemd/user/onedrive.service
+	rm -f $(DESTDIR)$(PREFIX)/bin/onedrive
+	rm -f $(DESTDIR)/usr/lib/systemd/user/onedrive.service
+
+version: .git/HEAD .git/index
+	echo $(shell git describe --tags 2>/dev/null) >version
