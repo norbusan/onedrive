@@ -1,27 +1,20 @@
 ---
- Makefile |    9 ++++-----
- 1 file changed, 4 insertions(+), 5 deletions(-)
+ Makefile |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -1,6 +1,5 @@
- DC = dmd
- DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl
--DESTDIR = /usr/local/bin
+@@ -1,5 +1,5 @@
+ DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl -J.
+-PREFIX = /usr/local
++PREFIX = /usr
  
  SOURCES = \
  	src/config.d \
-@@ -28,9 +27,9 @@
- 	rm -f onedrive.o onedrive
+@@ -41,4 +41,4 @@
+ 	rm -f $(DESTDIR)/usr/lib/systemd/user/onedrive.service
  
- install: onedrive onedrive.service
--	install onedrive $(DESTDIR)/onedrive
--	install -m 644 onedrive.service /usr/lib/systemd/user
-+	install onedrive $(DESTDIR)/usr/bin/onedrive
-+	install -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user
- 
- uninstall:
--	rm -f $(DESTDIR)/onedrive
--	rm -f /usr/lib/systemd/user/onedrive.service
-+	rm -f $(DESTDIR)/usr/bin/onedrive
-+	rm -f $(DESTDIR)/lib/systemd/user
+ version: .git/HEAD .git/index
+-	echo $(shell git describe --tags 2>/dev/null) >version
+\ No newline at end of file
++	echo $(shell git describe --tags 2>/dev/null) >version
