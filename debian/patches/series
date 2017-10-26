@@ -1,2 +1,4 @@
-adjust-makefile
-ldmd2-compile-support
+common-makefile-fixes
+# only one of the following two can be selected!
+gdc-support
+#ldmd2-support
