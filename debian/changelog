@@ -1,8 +1,9 @@
 onedrive (1.1.20170919-2) unstable; urgency=medium
 
   * switch to gdc
+  * bump standards version, no changes necessary
 
- -- Norbert Preining <preining@debian.org>  Wed, 15 Nov 2017 15:22:17 +0900
+ -- Norbert Preining <preining@debian.org>  Wed, 15 Nov 2017 15:25:51 +0900
 
 onedrive (1.1.20170919-1) unstable; urgency=medium
 

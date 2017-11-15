@@ -3,7 +3,7 @@ Section: net
 Priority: optional
 Maintainer: Norbert Preining <preining@debian.org>
 Build-Depends: libcurl4-gnutls-dev, libsqlite3-dev, ldc, debhelper (>= 7)
-Standards-Version: 4.0.0
+Standards-Version: 4.1.1
 Homepage: http://skilion.github.io/onedrive/
 Vcs-Git: git://anonscm.debian.org/users/preining/onedrive.git
 Vcs-Browser: http://anonscm.debian.org/cgit/users/preining/onedrive.git
