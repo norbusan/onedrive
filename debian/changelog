@@ -1,3 +1,9 @@
+onedrive (1.1.20170919-2) unstable; urgency=medium
+
+  * switch to gdc
+
+ -- Norbert Preining <preining@debian.org>  Wed, 15 Nov 2017 15:22:17 +0900
+
 onedrive (1.1.20170919-1) unstable; urgency=medium
 
   * New upstream version 1.1.20170919
