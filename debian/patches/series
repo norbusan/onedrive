@@ -1,4 +1,4 @@
 common-makefile-fixes
 # only one of the following two can be selected!
-gdc-support
+#gdc-support
 #ldmd2-support

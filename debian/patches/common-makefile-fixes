@@ -6,19 +6,20 @@ fix PREFIX, and pre-generate version file
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -1,5 +1,5 @@
- DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl -J.
+@@ -1,6 +1,6 @@
+ DC = dmd
+ DFLAGS = -g -ofonedrive -O -L-lcurl -L-lsqlite3 -L-ldl -J.
 -PREFIX = /usr/local
 +PREFIX = /usr
  
  SOURCES = \
  	src/config.d \
-@@ -40,5 +40,3 @@
+@@ -35,5 +35,3 @@
  	rm -f $(DESTDIR)$(PREFIX)/bin/onedrive
  	rm -f $(DESTDIR)/usr/lib/systemd/user/onedrive.service
  
 -version: .git/HEAD .git/index
--	echo $(shell git describe --tags 2>/dev/null) >version
+-	echo $(shell git describe --tags) >version
 \ No newline at end of file
 --- /dev/null
 +++ onedrive.git/version
