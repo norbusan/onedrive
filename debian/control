@@ -2,7 +2,7 @@ Source: onedrive
 Section: net
 Priority: optional
 Maintainer: Norbert Preining <preining@debian.org>
-Build-Depends: libcurl4-gnutls-dev, libsqlite3-dev, ldc, debhelper (>= 7)
+Build-Depends: libcurl4-openssl-dev, libsqlite3-dev, ldc, debhelper (>= 7)
 Standards-Version: 4.1.1
 Homepage: http://skilion.github.io/onedrive/
 Vcs-Git: git://anonscm.debian.org/users/preining/onedrive.git
