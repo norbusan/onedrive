@@ -13,26 +13,21 @@ private immutable {
 	string driveUrl = "https://graph.microsoft.com/v1.0/me/drive";
 	string itemByIdUrl = "https://graph.microsoft.com/v1.0/me/drive/items/";
 	string itemByPathUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/";
-	string driveByIdUrl = "https://graph.microsoft.com/v1.0/me/drives/";
+	string driveByIdUrl = "https://graph.microsoft.com/v1.0/drives/";
 }
 
 class OneDriveException: Exception
 {
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/concepts/errors
 	int httpStatusCode;
-	// https://dev.onedrive.com/misc/errors.htm
 	JSONValue error;
-
-	@nogc @safe pure nothrow this(string msg, Throwable next, string file = __FILE__, size_t line = __LINE__)
-	{
-		super(msg, file, line, next);
-	}
 
 	@safe pure this(int httpStatusCode, string reason, string file = __FILE__, size_t line = __LINE__)
 	{
 		this.httpStatusCode = httpStatusCode;
 		this.error = error;
 		string msg = format("HTTP request returned status code %d (%s)", httpStatusCode, reason);
-		super(msg, file, line, next);
+		super(msg, file, line);
 	}
 
 	this(int httpStatusCode, string reason, ref const JSONValue error, string file = __FILE__, size_t line = __LINE__)
@@ -40,7 +35,7 @@ class OneDriveException: Exception
 		this.httpStatusCode = httpStatusCode;
 		this.error = error;
 		string msg = format("HTTP request returned status code %d (%s)\n%s", httpStatusCode, reason, toJSON(error, true));
-		super(msg, file, line, next);
+		super(msg, file, line);
 	}
 }
 
@@ -90,97 +85,111 @@ final class OneDriveApi
 		return true;
 	}
 
-	// https://dev.onedrive.com/drives/default.htm
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/drive_get
 	JSONValue getDefaultDrive()
 	{
 		checkAccessTokenExpired();
 		return get(driveUrl);
 	}
 
-	// https://dev.onedrive.com/items/view_delta.htm
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get
+	JSONValue getDefaultRoot()
+	{
+		checkAccessTokenExpired();
+		return get(driveUrl ~ "/root");
+	}
+
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_delta
 	JSONValue viewChangesById(const(char)[] driveId, const(char)[] id, const(char)[] deltaLink)
 	{
 		checkAccessTokenExpired();
-		if (deltaLink) return get(deltaLink);
-		const(char)[] url = driveByIdUrl ~ driveId ~ "/items/" ~ id ~ "/delta";
-		url ~= "?select=id,name,eTag,cTag,deleted,file,folder,root,fileSystemInfo,remoteItem,parentReference";
+		const(char)[] url = deltaLink;
+		if (url == null) {
+			url = driveByIdUrl ~ driveId ~ "/items/" ~ id ~ "/delta";
+			url ~= "?select=id,name,eTag,cTag,deleted,file,folder,root,fileSystemInfo,remoteItem,parentReference";
+		}
 		return get(url);
 	}
 
-	// https://dev.onedrive.com/items/view_delta.htm
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_delta
 	JSONValue viewChangesByPath(const(char)[] path, const(char)[] deltaLink)
 	{
 		checkAccessTokenExpired();
-		if (deltaLink) return get(deltaLink);
-		string url = itemByPathUrl ~ encodeComponent(path) ~ ":/delta";
-		// HACK
-		if (path == ".") url = driveUrl ~ "/root/delta";
-		url ~= "?select=id,name,eTag,cTag,deleted,file,folder,root,fileSystemInfo,remoteItem,parentReference";
+		const(char)[] url = deltaLink;
+		if (url == null) {
+			if (path == ".") url = driveUrl ~ "/root/delta";
+			else url = itemByPathUrl ~ encodeComponent(path) ~ ":/delta";
+			url ~= "?select=id,name,eTag,cTag,deleted,file,folder,root,fileSystemInfo,remoteItem,parentReference";
+		}
 		return get(url);
 	}
 
-	// https://dev.onedrive.com/items/download.htm
-	void downloadById(const(char)[] id, string saveToPath)
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get_content
+	void downloadById(const(char)[] driveId, const(char)[] id, string saveToPath)
 	{
 		checkAccessTokenExpired();
-		import std.file;
 		scope(failure) {
 			if (exists(saveToPath)) remove(saveToPath);
 		}
-		// mkdir if need, or File(saveToPath, "wb") may fail
-		if ( !exists(dirName(saveToPath)) ) {
-		   mkdirRecurse(dirName(saveToPath));
-		}
-		const(char)[] url = itemByIdUrl ~ id ~ "/content?AVOverride=1";
+		mkdirRecurse(dirName(saveToPath));
+		const(char)[] url = driveByIdUrl ~ driveId ~ "/items/" ~ id ~ "/content?AVOverride=1";
 		download(url, saveToPath);
 	}
 
-	// https://dev.onedrive.com/items/upload_put.htm
-	JSONValue simpleUpload(string localPath, const(char)[] remotePath, const(char)[] eTag = null)
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content
+	JSONValue simpleUpload(string localPath, string parentDriveId, string parentId, string filename, const(char)[] eTag = null)
 	{
 		checkAccessTokenExpired();
-		string url = itemByPathUrl ~ encodeComponent(remotePath) ~ ":/content";
-		if (eTag) http.addRequestHeader("If-Match", eTag);
-		else url ~= "?@name.conflictBehavior=fail";
+		string url = driveByIdUrl ~ parentDriveId ~ "/items/" ~ parentId ~ ":/" ~ encodeComponent(filename) ~ ":/content";
+		// TODO: investigate why this fails for remote folders
+		//if (eTag) http.addRequestHeader("If-Match", eTag);
+		/*else http.addRequestHeader("If-None-Match", "*");*/
 		return upload(localPath, url);
 	}
 
-	// https://dev.onedrive.com/items/update.htm
-	JSONValue updateById(const(char)[] id, JSONValue data, const(char)[] eTag = null)
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content
+	JSONValue simpleUploadReplace(string localPath, string driveId, string id, const(char)[] eTag = null)
 	{
 		checkAccessTokenExpired();
-		char[] url = itemByIdUrl ~ id;
+		string url = driveByIdUrl ~ driveId ~ "/items/" ~ id ~ "/content";
+		if (eTag) http.addRequestHeader("If-Match", eTag);
+		return upload(localPath, url);
+	}
+
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_update
+	JSONValue updateById(const(char)[] driveId, const(char)[] id, JSONValue data, const(char)[] eTag = null)
+	{
+		checkAccessTokenExpired();
+		const(char)[] url = driveByIdUrl ~ driveId ~ "/items/" ~ id;
 		if (eTag) http.addRequestHeader("If-Match", eTag);
 		http.addRequestHeader("Content-Type", "application/json");
 		return patch(url, data.toString());
 	}
 
-	// https://dev.onedrive.com/items/delete.htm
-	void deleteById(const(char)[] id, const(char)[] eTag = null)
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_delete
+	void deleteById(const(char)[] driveId, const(char)[] id, const(char)[] eTag = null)
 	{
 		checkAccessTokenExpired();
-		char[] url = itemByIdUrl ~ id;
+		const(char)[] url = driveByIdUrl ~ driveId ~ "/items/" ~ id;
 		//TODO: investigate why this always fail with 412 (Precondition Failed)
 		//if (eTag) http.addRequestHeader("If-Match", eTag);
 		del(url);
 	}
 
-	// https://dev.onedrive.com/items/create.htm
-	JSONValue createByPath(const(char)[] parentPath, JSONValue item)
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_post_children
+	JSONValue createById(const(char)[] parentDriveId, const(char)[] parentId, JSONValue item)
 	{
 		checkAccessTokenExpired();
-		string url = itemByPathUrl ~ encodeComponent(parentPath) ~ ":/children";
-		// HACK
-		if (parentPath == ".") url = driveUrl ~ "/root/children";
+		const(char)[] url = driveByIdUrl ~ parentDriveId ~ "/items/" ~ parentId ~ "/children";
 		http.addRequestHeader("Content-Type", "application/json");
 		return post(url, item.toString());
 	}
 
-	// https://dev.onedrive.com/items/upload_large_files.htm
-	JSONValue createUploadSession(const(char)[] path, const(char)[] eTag = null)
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession
+	JSONValue createUploadSession(const(char)[] parentDriveId, const(char)[] parentId, const(char)[] filename, const(char)[] eTag = null)
 	{
 		checkAccessTokenExpired();
-		string url = itemByPathUrl ~ encodeComponent(path) ~ ":/createUploadSession";
+		const(char)[] url = driveByIdUrl ~ parentDriveId ~ "/items/" ~ parentId ~ ":/" ~ encodeComponent(filename) ~ ":/createUploadSession";
 		if (eTag) http.addRequestHeader("If-Match", eTag);
 		return post(url, null);
 	}
@@ -374,11 +383,7 @@ final class OneDriveApi
 			content ~= data;
 			return data.length;
 		};
-		try {
-			http.perform();
-		} catch (CurlException e) {
-			throw new OneDriveException(e.msg, e);
-		}
+		http.perform();
 		JSONValue json;
 		try {
 			json = content.parseJSON();
