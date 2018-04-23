@@ -6,7 +6,7 @@
 * Real-Time file monitoring with Inotify
 * Resumable uploads
 * Support OneDrive for Business (part of Office 365)
-* Shared folders :scream:
+* Shared folders (not Business)
 
 ### What's missing:
 * While local changes are uploaded right away, remote changes are delayed
@@ -54,8 +54,9 @@ make DC=ldmd2
 ```
 
 ### First run :zap:
-After installing the application you must run it at least one time from the terminal to authorize it. The procedure requires a web browser.
-You will be asked to open a specific link where you will have to login into your Microsoft Account and give the application the permission to access your files. After giving the permission, you will be redirected to a blank page. Copy the URI of the blank page into the application.
+After installing the application you must run it at least once from the terminal to authorize it.
+
+You will be asked to open a specific link using your web browser where you will have to login into your Microsoft Account and give the application the permission to access your files. After giving the permission, you will be redirected to a blank page. Copy the URI of the blank page into the application.
 
 ### Uninstall
 ```sh
@@ -132,7 +133,10 @@ If you encounter any bugs you can report them here on Github. Before filing an i
 1. Check the version of the application you are using `onedrive --version`
 2. Run the application in verbose mode `onedrive --verbose`
 3. Have the log of the error (preferably uploaded on an external website such as [pastebin](https://pastebin.com/))
-4. Collect any information that you may think it is relevant to the error (such as the steps to trigger it)
+4. Collect any information that you may think it is relevant to the error
+	- The steps to trigger the error
+	- What have you already done to try solve it
+	- ...
 
 ### All available commands:
 ```text
@@ -145,7 +149,7 @@ no option        Sync and exit
 -m     --monitor Keep monitoring for local and remote changes
    --print-token Print the access token, useful for debugging
         --resync Forget the last saved state, perform a full sync
-       --syncdir Set the directory used to sync the files are synced
+       --syncdir Set the directory used to sync the files that are synced
 -v     --verbose Print more details, useful for debugging
        --version Print the version and exit
 -h        --help This help information.
