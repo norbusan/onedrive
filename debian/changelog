@@ -1,11 +1,11 @@
-onedrive (1.1.20180424-1) unstable; urgency=medium
+onedrive (1.1.20180922~really1.1.3-1) unstable; urgency=medium
 
-  * new upstream checkout from git
+  * version 1.1.3
   * use again ldc as it is the default d compiler
   * adapt build system to upstream
   * bump standards version, no changes necessary
 
- -- Norbert Preining <preining@debian.org>  Tue, 24 Apr 2018 01:11:51 +0900
+ -- Norbert Preining <preining@debian.org>  Sat, 22 Sep 2018 14:51:58 +0900
 
 onedrive (1.1.20170919-2) unstable; urgency=medium
 
