@@ -1,8 +1,8 @@
 fix PREFIX, and pre-generate version file
 ---
- Makefile |    4 +---
+ Makefile |   12 +++++-------
  version  |    1 +
- 2 files changed, 2 insertions(+), 3 deletions(-)
+ 2 files changed, 6 insertions(+), 7 deletions(-)
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
@@ -14,6 +14,21 @@ fix PREFIX, and pre-generate version file
  
  ifneq ("$(wildcard /etc/redhat-release)","")
  RHEL = $(shell cat /etc/redhat-release | grep -E "(Red Hat Enterprise Linux Server|CentOS Linux)" | wc -l)
+@@ -44,10 +44,10 @@ else
+ 	chown root.root $(DESTDIR)/usr/lib/systemd/user/
+ 	chmod 0755 $(DESTDIR)/usr/lib/systemd/user/
+ 	install -D -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user/
+-	mkdir -p $(DESTDIR)/usr/lib/systemd/system/
+-	chown root.root $(DESTDIR)/usr/lib/systemd/system/
+-	chmod 0755 $(DESTDIR)/usr/lib/systemd/system/
+-	install -D -m 644 onedrive@.service $(DESTDIR)/usr/lib/systemd/system/
++	mkdir -p $(DESTDIR)/lib/systemd/system/
++	chown root.root $(DESTDIR)/lib/systemd/system/
++	chmod 0755 $(DESTDIR)/lib/systemd/system/
++	install -D -m 644 onedrive@.service $(DESTDIR)/lib/systemd/system/
+ endif
+ 
+ onedrive: version $(SOURCES)
 @@ -67,5 +67,3 @@ else
  	rm -f $(DESTDIR)/usr/lib/systemd/system/onedrive@.service
  endif
