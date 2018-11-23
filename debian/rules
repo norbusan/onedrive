@@ -5,4 +5,5 @@
 
 override_dh_auto_build:
 	make DC=ldc2
+	chrpath --delete onedrive
 
