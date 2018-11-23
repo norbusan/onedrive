@@ -3,6 +3,8 @@ Wed Jul 13 13:42:51 JST 2016.
 
 The original source was downloaded from
   https://github.com/skilion/onedrive
+Later versions are based on
+  https://github.com/abraunegg/onedrive
 
 The contents of the debian/ directory is released under the GNU
 General Public Licence version 3 or (at your option) any later
@@ -13,7 +15,8 @@ The files under debian/ are under Copyright by:
 
 All other files are
 
-	Copyright (C) 2015-2016 skilion
+	Copyright (C) 2015-2018 skilion
+	Copyright (C) 2018-     abraunegg
 
 and licensed under the GNU General Public Licence version 3.
 

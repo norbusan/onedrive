@@ -12,16 +12,15 @@ fix PREFIX, and pre-generate version file
 -PREFIX = /usr/local
 +PREFIX = /usr
  
- SOURCES = \
- 	src/config.d \
-@@ -35,5 +35,3 @@ uninstall:
- 	rm -f $(DESTDIR)$(PREFIX)/bin/onedrive
- 	rm -f $(DESTDIR)/usr/lib/systemd/user/onedrive.service
+ ifneq ("$(wildcard /etc/redhat-release)","")
+ RHEL = $(shell cat /etc/redhat-release | grep -E "(Red Hat Enterprise Linux Server|CentOS Linux)" | wc -l)
+@@ -67,5 +67,3 @@ else
+ 	rm -f $(DESTDIR)/usr/lib/systemd/system/onedrive@.service
+ endif
  
 -version: .git/HEAD .git/index
 -	echo $(shell git describe --tags) >version
-\ No newline at end of file
 --- /dev/null
 +++ onedrive.git/version
 @@ -0,0 +1 @@
-+v1.1.3
++v2.1.6
