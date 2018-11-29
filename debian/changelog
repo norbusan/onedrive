@@ -1,11 +1,13 @@
-onedrive (2.2.0-2~2) UNRELEASED; urgency=medium
+onedrive (2.2.0-2~3) UNRELEASED; urgency=medium
 
   * update homepage to abraunegg gh
   * patch rework and cleanup
   * fix file renaming support
   * fix network error handling
+  * update man page
+  * remove older conffile /etc/onedrive.conf
 
- -- Norbert Preining <preining@debian.org>  Thu, 29 Nov 2018 15:07:59 +0900
+ -- Norbert Preining <preining@debian.org>  Thu, 29 Nov 2018 18:00:07 +0900
 
 onedrive (2.2.0-1) unstable; urgency=medium
 
