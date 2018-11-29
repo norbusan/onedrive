@@ -11,4 +11,4 @@
 -version: .git/HEAD .git/index
 -	echo $(shell git describe --tags) >version
 +version: debian/changelog
-+	echo v$(dpkg-parsechangelog  -S version) > version
++	echo v$(shell dpkg-parsechangelog  -S version) > version
