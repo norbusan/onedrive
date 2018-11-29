@@ -1,0 +1,30 @@
+---
+ Makefile |    6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+--- onedrive.git.orig/Makefile
++++ onedrive.git/Makefile
+@@ -21,20 +21,20 @@
+ 	rm -f onedrive onedrive.o onedrive.service
+ 
+ debug: version $(SOURCES)
+-	dmd -debug -g -gs $(DFLAGS) $(SOURCES)
++	ldmd2 -debug -g -gs $(DFLAGS) $(SOURCES)
+ 
+ install: all
+ 	install -D onedrive $(DESTDIR)$(PREFIX)/bin/onedrive
+ 	install -D -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user/onedrive.service
+ 
+ onedrive: version $(SOURCES)
+-	dmd -g -inline -O -release $(DFLAGS) $(SOURCES)
++	ldmd2 -g -inline -O -release $(DFLAGS) $(SOURCES)
+ 
+ onedrive.service:
+ 	sed "s|@PREFIX@|$(PREFIX)|g" onedrive.service.in > onedrive.service
+ 
+ unittest: $(SOURCES)
+-	dmd -debug -g -gs -unittest $(DFLAGS) $(SOURCES)
++	ldmd2 -debug -g -gs -unittest $(DFLAGS) $(SOURCES)
+ 
+ uninstall:
+ 	rm -f $(DESTDIR)$(PREFIX)/bin/onedrive

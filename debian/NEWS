@@ -1,0 +1,13 @@
+onedrive (2.1.6-1) unstable; urgency=medium
+
+  * OneDrive package switched to new upstream. From upstream's README about
+    updating from the previous version:
+      Upgrading from 'skilion' client
+      The 'skilion' version contains a significant number of defect's in how
+      the local sync state is managed. When upgrading from the 'skilion'
+      version to this version, it is advisable to stop any service / onedrive
+      process from running and then remove any `items.sqlite3` file from your
+      configuration directory (`~/.config/onedrive/`) as this will force the
+      creation of a new local cache file.
+
+ -- Norbert Preining <preining@debian.org>  Fri, 23 Nov 2018 10:44:34 +0900

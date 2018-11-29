@@ -1,0 +1,48 @@
+---
+ Makefile       |    8 ++++----
+ src/onedrive.d |    2 +-
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+--- onedrive.git.orig/Makefile
++++ onedrive.git/Makefile
+@@ -1,4 +1,4 @@
+-DFLAGS = -ofonedrive -L-lcurl -L-lsqlite3 -L-ldl -J.
++DFLAGS = -oonedrive -lcurl -lsqlite3  -J.
+ PREFIX = /usr
+ 
+ SOURCES = \
+@@ -21,20 +21,20 @@
+ 	rm -f onedrive onedrive.o onedrive.service
+ 
+ debug: version $(SOURCES)
+-	dmd -debug -g -gs $(DFLAGS) $(SOURCES)
++	gdc --debug -g $(DFLAGS) $(SOURCES)
+ 
+ install: all
+ 	install -D onedrive $(DESTDIR)$(PREFIX)/bin/onedrive
+ 	install -D -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user/onedrive.service
+ 
+ onedrive: version $(SOURCES)
+-	dmd -g -inline -O -release $(DFLAGS) $(SOURCES)
++	gdc -g -O -frelease $(DFLAGS) $(SOURCES)
+ 
+ onedrive.service:
+ 	sed "s|@PREFIX@|$(PREFIX)|g" onedrive.service.in > onedrive.service
+ 
+ unittest: $(SOURCES)
+-	dmd -debug -g -gs -unittest $(DFLAGS) $(SOURCES)
++	gdc --debug -g --unittest $(DFLAGS) $(SOURCES)
+ 
+ uninstall:
+ 	rm -f $(DESTDIR)$(PREFIX)/bin/onedrive
+--- onedrive.git.orig/src/onedrive.d
++++ onedrive.git/src/onedrive.d
+@@ -39,7 +39,7 @@
+ 	{
+ 		this.httpStatusCode = httpStatusCode;
+ 		this.error = error;
+-		string msg = format("HTTP request returned status code %d (%s)\n%s", httpStatusCode, reason, toJSON(error, true));
++		string msg = format("HTTP request returned status code %d (%s)\n%s", httpStatusCode, reason, toJSON(&error, true));
+ 		super(msg, file, line, next);
+ 	}
+ }

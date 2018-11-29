@@ -1,0 +1,82 @@
+.TH onedrive "1" "October 2016" "1.1" "User Commands"
+.SH NAME
+onedrive \- folder synchronization with OneDrive
+.SH SYNOPSIS
+.B onedrive
+[\fI\,OPTION\/\fR]...
+.SH DESCRIPTION
+Without any argument the program syncs with OneDrive and exits.
+
+\fB\-m\fR \fB\-\-monitor\fR Keep monitoring for local and remote changes.
+.HP
+\fB\-\-resync\fR Forget the last saved state, perform a full sync.
+.HP
+\fB\-\-logout\fR Logout the current user.
+.HP
+\fB\-\-confdir\fR Set the directory to use to store the configuration files.
+.HP
+\fB\-v\fR \fB\-\-verbose\fR Print more details, useful for debugging.
+.HP
+\fB\-h\fR    \fB\-\-help\fR This help information.
+.PP
+
+.SH FEATURES
+
+State caching
+
+Real-Time file monitoring with Inotify
+
+Resumable uploads
+
+.SH MISSING FEATURES
+
+OneDrive for business is not supported
+
+While local changes are uploaded right away, remote changes are delayed.
+
+No GUI
+
+.SH CONFIGURATION
+You should copy the default config file into your home directory before making changes:
+.nf
+\f[C]
+mkdir\ \-p\ ~/.config/onedrive
+cp\ /usr/local/etc/onedrive.conf\ ~/.config/onedrive/config
+\f[]
+.fi
+
+Available options:
+.HP
+\f[B]client_id\f[]: application identifier necessary for the authentication
+.HP
+\f[B]sync_dir\f[]: directory where the files will be synced
+.HP
+\f[B]skip_file\f[]: any files that match this pattern will be skipped during sync
+.HP
+\f[B]skip_dir\f[]: any directories that match this pattern will be skipped during sync
+.PP
+Pattern are case insensitive.
+\f[B]*\f[] and \f[B]?\f[] wildcards characters are supported.
+Use \f[B]|\f[] to separate multiple patterns.
+
+.SH FIRST RUN
+The first time you run the program you will be asked to sign in. The procedure require a web browser.
+
+.SH SERVICE
+If you want to sync your files automatically, enable and start the systemd service:
+\f[C]
+systemctl --user enable onedrive
+systemctl --user start onedrive
+\f[]
+
+To see the logs run:
+\f[C]
+journalctl --user-unit onedrive -f
+\f[]
+
+.SH NOTES
+.HP
+After changing the filters (`skip_file` or `skip_dir` in your configs) you must execute `onedrive --resync`
+.HP
+Windows naming conventions apply
+

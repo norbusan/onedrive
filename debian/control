@@ -1,0 +1,19 @@
+Source: onedrive
+Section: net
+Priority: optional
+Maintainer: Norbert Preining <preining@debian.org>
+Build-Depends: libcurl4-openssl-dev, libsqlite3-dev, ldc, debhelper (>= 7), chrpath
+Standards-Version: 4.2.1
+Homepage: http://skilion.github.io/onedrive/
+Vcs-Git: https://salsa.debian.org/preining/onedrive.git
+Vcs-Browser: https://salsa.debian.org/preining/onedrive
+
+Package: onedrive
+Section: net
+Priority: optional
+Architecture: amd64 arm64 armhf i386
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: folder synchronization with OneDrive
+ OneDrive is the cloud storage system of Microsoft. This package provides
+ the command line client specialising in synchronizing with OneDrive cloud 
+ storage.
