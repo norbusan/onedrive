@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Norbert Preining <preining@debian.org>
 Build-Depends: libcurl4-openssl-dev, libsqlite3-dev, ldc, debhelper (>= 7), chrpath
 Standards-Version: 4.2.1
-Homepage: http://skilion.github.io/onedrive/
+Homepage: https://github.com/abraunegg/onedrive
 Vcs-Git: https://salsa.debian.org/preining/onedrive.git
 Vcs-Browser: https://salsa.debian.org/preining/onedrive
 
