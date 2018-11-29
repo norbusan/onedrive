@@ -4,6 +4,6 @@
 	dh $@
 
 override_dh_auto_build:
-	make DC=ldmd2
+	make DC=ldmd2 PREFIX=/usr
 	chrpath --delete onedrive
 

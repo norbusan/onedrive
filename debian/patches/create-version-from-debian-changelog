@@ -1,0 +1,14 @@
+---
+ Makefile |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+--- onedrive.orig/Makefile
++++ onedrive/Makefile
+@@ -67,5 +67,5 @@ else
+ 	rm -f $(DESTDIR)/usr/lib/systemd/system/onedrive@.service
+ endif
+ 
+-version: .git/HEAD .git/index
+-	echo $(shell git describe --tags) >version
++version: debian/changelog
++	echo v$(dpkg-parsechangelog  -S version) > version

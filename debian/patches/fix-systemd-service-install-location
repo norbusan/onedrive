@@ -1,19 +1,10 @@
 fix PREFIX, and pre-generate version file
 ---
- Makefile |   12 +++++-------
- version  |    1 +
- 2 files changed, 6 insertions(+), 7 deletions(-)
+ Makefile |    8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
---- onedrive.git.orig/Makefile
-+++ onedrive.git/Makefile
-@@ -1,6 +1,6 @@
- DC = dmd
- DFLAGS = -g -ofonedrive -O -L-lcurl -L-lsqlite3 -L-ldl -J.
--PREFIX = /usr/local
-+PREFIX = /usr
- 
- ifneq ("$(wildcard /etc/redhat-release)","")
- RHEL = $(shell cat /etc/redhat-release | grep -E "(Red Hat Enterprise Linux Server|CentOS Linux)" | wc -l)
+--- onedrive.orig/Makefile
++++ onedrive/Makefile
 @@ -44,10 +44,10 @@ else
  	chown root.root $(DESTDIR)/usr/lib/systemd/user/
  	chmod 0755 $(DESTDIR)/usr/lib/systemd/user/
@@ -29,13 +20,3 @@ fix PREFIX, and pre-generate version file
  endif
  
  onedrive: version $(SOURCES)
-@@ -67,5 +67,3 @@ else
- 	rm -f $(DESTDIR)/usr/lib/systemd/system/onedrive@.service
- endif
- 
--version: .git/HEAD .git/index
--	echo $(shell git describe --tags) >version
---- /dev/null
-+++ onedrive.git/version
-@@ -0,0 +1 @@
-+v2.1.6

@@ -1,4 +1,2 @@
-common-makefile-fixes
-# only one of the following two can be selected!
-#gdc-support
-#ldmd2-support
+fix-systemd-service-install-location
+create-version-from-debian-changelog
