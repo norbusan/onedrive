@@ -109,17 +109,18 @@ cp\ /usr/share/doc/onedrive/config\ ~/.config/onedrive/config
 
 Available options:
 .TP
-\fBclient_id\fP
-application identifier necessary for the authentication
-.TP
 \fBsync_dir\fP
 directory where the files will be synced
 .TP
 \fBskip_file\fP
 any files that match this pattern will be skipped during sync
 .TP
-\fBskip_dir\fP
-any directories that match this pattern will be skipped during sync
+\fBskip_symlinks\fP
+skip symbolic links during sync, defaults to \fB"false"\fP
+.TP
+\fBmonitor_interval\fP
+the number of seconds by which each sync operation is undertaken when
+idle under monitor mode, defaults to \fB"45"\fP
 .TP
 \fBlog_dir\fP
 defines the directory where logging output is saved to, needs to end with a slash
