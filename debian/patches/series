@@ -1,3 +1,4 @@
+fix-install-location
 fix-systemd-service-install-location
 create-version-from-debian-changelog
 fix-renaming-support

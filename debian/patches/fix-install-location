@@ -1,0 +1,14 @@
+---
+ Makefile |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- onedrive.orig/Makefile
++++ onedrive/Makefile
+@@ -1,6 +1,6 @@
+ DC = dmd
+ DFLAGS = -g -ofonedrive -O -L-lcurl -L-lsqlite3 -L-ldl -J.
+-PREFIX = /usr/local
++PREFIX = /usr
+ 
+ ifneq ("$(wildcard /etc/redhat-release)","")
+ RHEL = $(shell cat /etc/redhat-release | grep -E "(Red Hat Enterprise Linux Server|CentOS Linux)" | wc -l)
