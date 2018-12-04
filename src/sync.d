@@ -167,6 +167,8 @@ final class SyncEngine
 	private bool malwareDetected = false;
 	// download filesystem issue flag
 	private bool downloadFailed = false;
+	// initialization has been done
+	private bool initDone = false;
 
 	this(Config cfg, OneDriveApi onedrive, ItemDatabase itemdb, SelectiveSync selectiveSync)
 	{
@@ -182,6 +184,11 @@ final class SyncEngine
 	{
 		// Set accountType, defaultDriveId, defaultRootId & remainingFreeSpace once and reuse where possible
 		JSONValue oneDriveDetails;
+
+
+		if (initDone) {
+			return;
+		}
 
 		// Need to catch 400 or 5xx server side errors at initialization
 		try {
@@ -239,6 +246,7 @@ final class SyncEngine
 			auto item = session.upload();
 			saveItem(item);
 		}		
+		initDone = true;
 	}
 
 	// Configure noRemoteDelete if function is called
@@ -740,9 +748,22 @@ final class SyncEngine
 			if (oldPath != newPath) {
 				log.log("Moving ", oldPath, " to ", newPath);
 				if (exists(newPath)) {
-					// TODO: force remote sync by deleting local item
-					log.vlog("The destination is occupied, renaming the conflicting file...");
-					safeRename(newPath);
+					Item localNewItem;
+					if (itemdb.selectByPath(newPath, defaultDriveId, localNewItem)) {
+						if (isItemSynced(localNewItem, newPath)) {
+							log.vlog("Destination is in sync and will be overwritten");
+						} else {
+							// TODO: force remote sync by deleting local item
+							log.vlog("The destination is occupied, renaming the conflicting file...");
+							safeRename(newPath);
+						}
+					} else {
+						// to be overwritten item is not already in the itemdb, so it should
+						// be synced. Do a safe rename here, too.
+						// TODO: force remote sync by deleting local item
+						log.vlog("The destination is occupied by new file, renaming the conflicting file...");
+						safeRename(newPath);
+					}
 				}
 				rename(oldPath, newPath);
 			}
@@ -853,14 +874,30 @@ final class SyncEngine
 			Item item;
 			if (!itemdb.selectById(i[0], i[1], item)) continue; // check if the item is in the db
 			string path = itemdb.computePath(i[0], i[1]);
-			log.log("Deleting item ", path);
+			log.log("Trying to delete item ", path);
 			itemdb.deleteById(item.driveId, item.id);
 			if (item.remoteDriveId != null) {
 				// delete the linked remote folder
 				itemdb.deleteById(item.remoteDriveId, item.remoteId);
 			}
+			bool needsRemoval = false;
 			if (exists(path)) {
 				// path exists on the local system	
+				// make sure that the path refers to the correct item
+				Item pathItem;
+				if (itemdb.selectByPath(path, item.driveId, pathItem)) {
+					if (pathItem.id == item.id) {
+						needsRemoval = true;
+					} else {
+						log.log("Skipped due to id difference!");
+					}
+				} else {
+					// item has disappeared completely
+					needsRemoval = true;
+				}
+			}
+			if (needsRemoval) {
+				log.log("Deleting item ", path);
 				if (isFile(path)) {
 					remove(path);
 				} else {
@@ -1678,5 +1715,38 @@ final class SyncEngine
 				
 		// Make the change on OneDrive
 		auto res = onedrive.moveByPath(sourcePath, moveData);	
+	}
+	
+	// Query Office 365 SharePoint Shared Library site to obtain it's Drive ID
+	void querySiteCollectionForDriveID(string o365SharedLibraryName){
+		// Steps to get the ID:
+		// 1. Query https://graph.microsoft.com/v1.0/sites?search= with the name entered
+		// 2. Evaluate the response. A valid response will contain the description and the id. If the response comes back with nothing, the site name cannot be found or no access
+		// 3. If valid, use the returned ID and query the site drives
+		//		https://graph.microsoft.com/v1.0/sites/<site_id>/drives
+		// 4. Display Shared Library Name & Drive ID
+		
+		string site_id;
+		string drive_id;
+		JSONValue siteQuery = onedrive.o365SiteSearch(o365SharedLibraryName);
+		
+		foreach (searchResult; siteQuery["value"].array) {
+			// Need an 'exclusive' match here with as entered
+			if (o365SharedLibraryName == searchResult["description"].str){
+				// 'description' matches search request
+				site_id = searchResult["id"].str;
+				JSONValue siteDriveQuery = onedrive.o365SiteDrives(site_id);
+				foreach (driveResult; siteDriveQuery["value"].array) {
+					drive_id = driveResult["id"].str;
+				}
+			}
+		}
+		
+		log.log("Office 365 Library Name: ", o365SharedLibraryName);
+		if(drive_id != null) {
+			log.log("drive_id: ", drive_id);
+		} else {
+			writeln("ERROR: This site could not be found. Please check it's name and your permissions to access the site.");
+		}
 	}
 }

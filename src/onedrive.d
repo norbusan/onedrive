@@ -10,11 +10,18 @@ static import log;
 shared bool debugResponse = false;
 
 private immutable {
+	// Client Identifier
 	string clientId = "22c49a0d-d21c-4792-aed1-8f163c982546";
+	
+	// Personal & Business Queries
 	string authUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 	string redirectUrl = "https://login.microsoftonline.com/common/oauth2/nativeclient";
 	string tokenUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 	string driveByIdUrl = "https://graph.microsoft.com/v1.0/drives/";
+	
+	// Office 365 / SharePoint Queries
+	string siteSearchUrl = "https://graph.microsoft.com/v1.0/sites?search";
+	string siteDriveUrl = "https://graph.microsoft.com/v1.0/sites/";
 }
 
 private {
@@ -61,8 +68,25 @@ final class OneDriveApi
 	{
 		this.cfg = cfg;
 		http = HTTP();
+		// DNS lookup timeout
 		http.dnsTimeout = (dur!"seconds"(5));
-		http.dataTimeout = (dur!"seconds"(3600));
+		// timeout for connecting
+		http.connectTimeout = (dur!"seconds"(10));
+		// Timeouts
+		// with the following settings we force
+		// - if there is no data flow for 5min, abort
+		// - if the download time for one item exceeds 1h, abort
+		//
+		// timeout for activity on connection
+		// this translates into Curl's CURLOPT_LOW_SPEED_TIME
+		// which says
+		//   It contains the time in number seconds that the
+		//   transfer speed should be below the CURLOPT_LOW_SPEED_LIMIT
+		//   for the library to consider it too slow and abort.
+		http.dataTimeout = (dur!"seconds"(300));
+		// maximum time an operation is allowed to take
+		// This includes dns resolution, connecting, data transfer, etc.
+		http.operationTimeout = (dur!"seconds"(3600));
 		
 		// Specify how many redirects should be allowed
 		http.maxRedirects(5);
@@ -286,6 +310,22 @@ final class OneDriveApi
 		return get(uploadUrl, true);
 	}
 
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/site_search?view=odsp-graph-online
+	JSONValue o365SiteSearch(string o365SharedLibraryName){
+		checkAccessTokenExpired();
+		const(char)[] url;
+		url = siteSearchUrl ~ "=" ~ o365SharedLibraryName;
+		return get(url);
+	}
+		
+	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/drive_list?view=odsp-graph-online
+	JSONValue o365SiteDrives(string site_id){
+		checkAccessTokenExpired();
+		const(char)[] url;
+		url = siteDriveUrl ~ site_id ~ "/drives";
+		return get(url);
+	}
+
 	private void redeemToken(const(char)[] authCode)
 	{
 		const(char)[] postData =
@@ -506,7 +546,7 @@ final class OneDriveApi
 		} catch (CurlException e) {
 			// Potentially Timeout was reached on handle error
 			log.error("\nAccess to the Microsoft OneDrive service timed out - Internet connectivity issue?\n");
-			exit(-1);
+			throw e;
 		}
 		
 		JSONValue json;
@@ -635,7 +675,6 @@ final class OneDriveApi
 			// "else"
 			default:
 				throw new OneDriveException(http.statusLine.code, http.statusLine.reason); 
-				break;
 		}
 	}
 
@@ -645,7 +684,7 @@ final class OneDriveApi
 		{
 			//	412 - Precondition Failed
 			case 412:
-				throw new OneDriveException(http.statusLine.code, http.statusLine.reason);
+				log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' - gracefully handling error");
 				break;
 				
 			// Server side (OneDrive) Errors
@@ -662,7 +701,6 @@ final class OneDriveApi
 			default:
 			if (http.statusLine.code / 100 != 2 && http.statusLine.code != 302) {
 				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
-				break;
 			}
 		}
 	}
