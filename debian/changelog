@@ -1,4 +1,4 @@
-onedrive (2.2.1-1~1) UNRELEASED; urgency=medium
+onedrive (2.2.1-1) unstable; urgency=medium
 
   * new upstream release
     - fix file renaming support
@@ -8,7 +8,7 @@ onedrive (2.2.1-1~1) UNRELEASED; urgency=medium
   * patch rework and cleanup
   * remove older conffile /etc/onedrive.conf
 
- -- Norbert Preining <preining@debian.org>  Tue, 04 Dec 2018 11:30:35 +0900
+ -- Norbert Preining <preining@debian.org>  Tue, 04 Dec 2018 12:06:32 +0900
 
 onedrive (2.2.0-1) unstable; urgency=medium
 
