@@ -2,11 +2,11 @@
  Makefile |    4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)
 
---- onedrive.orig/Makefile
-+++ onedrive/Makefile
-@@ -67,5 +67,5 @@ else
- 	rm -f $(DESTDIR)/usr/lib/systemd/system/onedrive@.service
- endif
+--- onedrive.git.orig/Makefile
++++ onedrive.git/Makefile
+@@ -80,5 +80,5 @@ endif
+ 	for i in $(DOCFILES) ; do rm -f $(DESTDIR)$(DOCDIR)/$$i ; done
+ 	rm -f $(DESTDIR)$(MANDIR)/onedrive.1
  
 -version: .git/HEAD .git/index
 -	echo $(shell git describe --tags) >version
