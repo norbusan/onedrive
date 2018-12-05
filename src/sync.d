@@ -1176,6 +1176,11 @@ final class SyncEngine
 			// Personal Account
 			maxPathLength = 430;
 		}
+
+		if (!exists(path)) {
+			log.log("Skipping item - has disappeared: ", path);
+			return;
+		}
 		
 		if(path.byGrapheme.walkLength < maxPathLength){
 			// path is less than maxPathLength
@@ -1677,6 +1682,8 @@ final class SyncEngine
 	{
 		Item item;
 		if (!itemdb.selectByPath(path, defaultDriveId, item)) {
+			// TODO: an item has been deleted but not uploaded by now
+			// shouldn't we just vlog here?
 			throw new SyncException("The item to delete is not in the local database");
 		}
 		if (item.parentId == null) {
