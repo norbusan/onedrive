@@ -5,6 +5,7 @@ import std.exception: enforce;
 import std.file, std.json, std.path;
 import std.regex;
 import std.stdio, std.string, std.uni, std.uri;
+import std.net.curl: CurlTimeoutException;
 import core.time, core.thread;
 import core.stdc.stdlib;
 import config, itemdb, onedrive, selective, upload, util;
@@ -510,7 +511,11 @@ final class SyncEngine
 				}
 				
 				else throw e;
+			} catch (CurlTimeoutException e) {
+				log.log("Curl returned timeout, gracefully handling error");
+				applyDifferences(driveId, idToQuery);
 			}
+
 			
 			// Are there any changes to process?
 			if (("value" in changes) != null) {
