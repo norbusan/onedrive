@@ -88,5 +88,8 @@ endif
 	for i in $(DOCFILES) ; do rm -f $(DESTDIR)$(DOCDIR)/$$i ; done
 	rm -f $(DESTDIR)$(MANDIR)/onedrive.1
 
+docker-debian: version
+	docker build -t onedrive-debian -f docker/Dockerfile.debian .
+
 version: .git/HEAD .git/index
 	echo $(shell git describe --tags) >version
