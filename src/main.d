@@ -1,7 +1,8 @@
 import core.stdc.stdlib: EXIT_SUCCESS, EXIT_FAILURE;
 import core.memory, core.time, core.thread;
+import std.concurrency;
 import std.getopt, std.file, std.path, std.process, std.stdio, std.conv, std.algorithm.searching;
-import config, itemdb, monitor, onedrive, selective, sync, util;
+import config, itemdb, monitor, onedrive, selective, sync, util, indicator;
 import std.net.curl: CurlException;
 static import log;
 
@@ -383,6 +384,9 @@ int main(string[] args)
 					log.logAndNotify("Cannot move item:, ", e.msg);
 				}
 			};
+			// kick of the indicator thread
+			Indicator ind = new Indicator();
+			ind.start();
 			// initialise the monitor class
 			if (cfg.getValue("skip_symlinks") == "true") skipSymlinks = true;
 			if (!downloadOnly) m.init(cfg, verbose, skipSymlinks);
@@ -393,6 +397,7 @@ int main(string[] args)
 				if (!downloadOnly) m.update(online);
 				auto currTime = MonoTime.currTime();
 				if (currTime - lastCheckTime > checkInterval) {
+					ind.send(thisTid, "syncing");
 					try {
 						if (!initSyncEngine(sync)) {
 							onedrive.http.shutdown();

@@ -28,7 +28,8 @@ SOURCES = \
 	src/sync.d \
 	src/upload.d \
 	src/util.d \
-	src/progress.d
+	src/progress.d \
+	src/indicator.d
 
 ifdef NOTIFICATIONS
 SOURCES += src/notifications/notify.d src/notifications/dnotify.d
