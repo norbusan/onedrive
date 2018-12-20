@@ -4,7 +4,7 @@
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -80,5 +80,5 @@ endif
+@@ -88,5 +88,5 @@ endif
  	for i in $(DOCFILES) ; do rm -f $(DESTDIR)$(DOCDIR)/$$i ; done
  	rm -f $(DESTDIR)$(MANDIR)/onedrive.1
  

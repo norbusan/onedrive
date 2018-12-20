@@ -4,9 +4,10 @@
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -1,6 +1,6 @@
- DC ?= dmd
- DFLAGS += -w -g -ofonedrive -O -L-lcurl -L-lsqlite3 -L-ldl -J.
+@@ -4,7 +4,7 @@ ifdef NOTIFICATIONS
+ 		-L-lgmodule-2.0 -L-lglib-2.0 -L-lnotify
+ endif
+ DFLAGS += -w -g -ofonedrive -O -L-lcurl -L-lsqlite3 $(DFLAGSNOTIFICATIONS) -L-ldl -J.
 -PREFIX ?= /usr/local
 +PREFIX ?= /usr
  DOCDIR ?= $(PREFIX)/share/doc/onedrive
