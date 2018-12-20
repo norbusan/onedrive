@@ -1,3 +1,10 @@
+onedrive (2.2.2-1) unstable; urgency=medium
+
+  * new upstream release
+  * enable notifications during build
+
+ -- Norbert Preining <preining@debian.org>  Thu, 20 Dec 2018 09:59:29 +0900
+
 onedrive (2.2.1-1) unstable; urgency=medium
 
   * new upstream release
