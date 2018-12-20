@@ -90,6 +90,10 @@ int main(string[] args)
 	bool disableUploadValidation = false;
 	// SharePoint / Office 365 Shared Library name to query
 	string o365SharedLibraryName;
+	// Do not use notifications in monitor mode
+	bool disableNotifications = false;
+	// Display application configuration but do not sync
+	bool displayConfiguration = false;
 	
 	try {
 		auto opt = getopt(
@@ -101,6 +105,8 @@ int main(string[] args)
 			"create-directory", "Create a directory on OneDrive - no sync will be performed.", &createDirectory,
 			"destination-directory", "Destination directory for renamed or move on OneDrive - no sync will be performed.", &destinationDirectory,
 			"debug-https", "Debug OneDrive HTTPS communication.", &debugHttp,
+			"disable-notifications", "Do not use desktop notifications in monitor mode.", &disableNotifications,
+			"display-config", "Display what options the client will use as currently configured - no sync will be performed.", &displayConfiguration,
 			"download-only|d", "Only download remote changes", &downloadOnly,
 			"disable-upload-validation", "Disable upload validation when uploading to OneDrive", &disableUploadValidation,
 			"enable-logging", "Enable client activity to a separate log file", &enableLogFile,
@@ -118,7 +124,7 @@ int main(string[] args)
 			"syncdir", "Set the directory used to sync the files that are synced", &syncDirName,
 			"synchronize", "Perform a synchronization", &synchronize,
 			"upload-only", "Only upload to OneDrive, do not sync changes from OneDrive locally", &uploadOnly,
-			"verbose|v", "Print more details, useful for debugging", &log.verbose,
+			"verbose|v+", "Print more details, useful for debugging (repeat for extra debugging)", &log.verbose,
 			"version", "Print the version and exit", &printVersion
 		);
 		if (opt.helpWanted) {
@@ -133,8 +139,13 @@ int main(string[] args)
 		log.error(e.msg);
 		log.error("Try 'onedrive -h' for more information");
 		return EXIT_FAILURE;
+	} catch (Exception e) {
+		// error
+		log.error(e.msg);
+		log.error("Try 'onedrive -h' for more information");
+		return EXIT_FAILURE;
 	}
-	
+
 	// disable buffering on stdout
 	stdout.setvbuf(0, _IONBF);
 
@@ -149,81 +160,11 @@ int main(string[] args)
 	log.vlog("Using Config Dir: ", configDirName);
 	if (!exists(configDirName)) mkdirRecurse(configDirName);
 	auto cfg = new config.Config(configDirName);
-	cfg.init();
-	
-	// Configure logging if enabled
-	if (enableLogFile){
-		// Read in a user defined log directory or use the default
-		string logDir = cfg.getValue("log_dir");
-		log.vlog("Using logfile dir: ", logDir);
-		log.init(logDir);
-	}
-	
-	// command line parameters override the config
-	if (syncDirName) cfg.setValue("sync_dir", syncDirName.expandTilde().absolutePath());
-	if (skipSymlinks) cfg.setValue("skip_symlinks", "true");
-  
-	// upgrades
-	if (exists(configDirName ~ "/items.db")) {
-		remove(configDirName ~ "/items.db");
-		log.log("Database schema changed, resync needed");
-		resync = true;
-	}
-
-	if (resync || logout) {
-		log.vlog("Deleting the saved status ...");
-		safeRemove(cfg.databaseFilePath);
-		safeRemove(cfg.deltaLinkFilePath);
-		safeRemove(cfg.uploadStateFilePath);
-		if (logout) {
-			safeRemove(cfg.refreshTokenFilePath);
-		}
-	}
-
-	log.vlog("Initializing the OneDrive API ...");
-	try {
-		online = testNetwork();
-	} catch (CurlException e) {
-		// No network connection to OneDrive Service
-		log.error("No network connection to Microsoft OneDrive Service");
-		if (!monitor) {
-			return EXIT_FAILURE;
-		}
-	}
-
-	// Initialize OneDrive, check for authorization
-	auto onedrive = new OneDriveApi(cfg, debugHttp);
-	onedrive.printAccessToken = printAccessToken;
-	if (!onedrive.init()) {
-		log.error("Could not initialize the OneDrive API");
-		// workaround for segfault in std.net.curl.Curl.shutdown() on exit
-		onedrive.http.shutdown();
+	if(!cfg.init()){
+		// There was an error loading the configuration
+		// Error message already printed
 		return EXIT_FAILURE;
 	}
-
-	// if --synchronize or --monitor not passed in, exit & display help
-	auto performSyncOK = false;
-	
-	if (synchronize || monitor) {
-		performSyncOK = true;
-	}
-	
-	// create-directory, remove-directory, source-directory, destination-directory 
-	// are activities that dont perform a sync no error message for these items either
-	if (((createDirectory != "") || (removeDirectory != "")) || ((sourceDirectory != "") && (destinationDirectory != "")) || (o365SharedLibraryName != "") ) {
-		performSyncOK = true;
-	}
-	
-	if (!performSyncOK) {
-		writeln("\n--synchronize or --monitor missing from your command options or use --help for further assistance\n");
-		writeln("No OneDrive sync will be performed without either of these two arguments being present\n");
-		onedrive.http.shutdown();
-		return EXIT_FAILURE;
-	}
-	
-	// initialize system
-	log.vlog("Opening the item database ...");
-	auto itemdb = new ItemDatabase(cfg.databaseFilePath);
 	
 	// Set the local path OneDrive root
 	string syncDir;
@@ -247,6 +188,120 @@ int main(string[] args)
 		// A shell and user is set, expand any ~ as this will be expanded if present
 		syncDir = expandTilde(cfg.getValue("sync_dir"));
 	}
+	
+	// Configure logging if enabled
+	if (enableLogFile){
+		// Read in a user defined log directory or use the default
+		string logDir = cfg.getValue("log_dir");
+		log.vlog("Using logfile dir: ", logDir);
+		log.init(logDir);
+	}
+
+	// Configure whether notifications are used
+	log.setNotifications(monitor && !disableNotifications);
+	
+	// command line parameters override the config
+	if (syncDirName) cfg.setValue("sync_dir", syncDirName.expandTilde().absolutePath());
+	if (skipSymlinks) cfg.setValue("skip_symlinks", "true");
+  
+	// upgrades
+	if (exists(configDirName ~ "/items.db")) {
+		remove(configDirName ~ "/items.db");
+		log.logAndNotify("Database schema changed, resync needed");
+		resync = true;
+	}
+
+	if (resync || logout) {
+		log.vlog("Deleting the saved status ...");
+		safeRemove(cfg.databaseFilePath);
+		safeRemove(cfg.deltaLinkFilePath);
+		safeRemove(cfg.uploadStateFilePath);
+		if (logout) {
+			safeRemove(cfg.refreshTokenFilePath);
+		}
+	}
+
+	// Display current application configuration, no application initialisation
+	if (displayConfiguration){
+		string userConfigFilePath = configDirName ~ "/config";
+		string userSyncList = configDirName ~ "/sync_list";
+		// Display all of the pertinent configuration options
+		writeln("Config path                         = ", configDirName);
+		
+		// Does a config file exist or are we using application defaults
+		if (exists(userConfigFilePath)){
+			writeln("Config file found in config path    = true");
+		} else {
+			writeln("Config file found in config path    = false");
+		}
+		
+		// Config Options
+		writeln("Config option 'sync_dir'            = ", syncDir);
+		writeln("Config option 'skip_file'           = ", cfg.getValue("skip_file"));
+		writeln("Config option 'skip_symlinks'       = ", cfg.getValue("skip_symlinks"));
+		writeln("Config option 'monitor_interval'    = ", cfg.getValue("monitor_interval"));
+		writeln("Config option 'log_dir'             = ", cfg.getValue("log_dir"));
+		
+		// Is config option drive_id configured?
+		if (cfg.getValue("drive_id", "") != ""){
+			writeln("Config option 'drive_id'            = ", cfg.getValue("drive_id"));
+		}
+		
+		// Is sync_list configured?
+		if (exists(userSyncList)){
+			writeln("Selective sync configured           = true");
+		} else {
+			writeln("Selective sync configured           = false");
+		}
+		
+		return EXIT_SUCCESS;
+	}
+	
+	log.vlog("Initializing the OneDrive API ...");
+	try {
+		online = testNetwork();
+	} catch (CurlException e) {
+		// No network connection to OneDrive Service
+		log.error("No network connection to Microsoft OneDrive Service");
+		if (!monitor) {
+			return EXIT_FAILURE;
+		}
+	}
+
+	// Initialize OneDrive, check for authorization
+	auto onedrive = new OneDriveApi(cfg, debugHttp);
+	onedrive.printAccessToken = printAccessToken;
+	if (!onedrive.init()) {
+		log.error("Could not initialize the OneDrive API");
+		// workaround for segfault in std.net.curl.Curl.shutdown() on exit
+		onedrive.http.shutdown();
+		return EXIT_FAILURE;
+	}
+	
+	// if --synchronize or --monitor not passed in, exit & display help
+	auto performSyncOK = false;
+	
+	if (synchronize || monitor) {
+		performSyncOK = true;
+	}
+	
+	// create-directory, remove-directory, source-directory, destination-directory 
+	// are activities that dont perform a sync no error message for these items either
+	if (((createDirectory != "") || (removeDirectory != "")) || ((sourceDirectory != "") && (destinationDirectory != "")) || (o365SharedLibraryName != "")) {
+		performSyncOK = true;
+	}
+	
+	if (!performSyncOK) {
+		writeln("\n--synchronize or --monitor missing from your command options or use --help for further assistance\n");
+		writeln("No OneDrive sync will be performed without either of these two arguments being present\n");
+		onedrive.http.shutdown();
+		return EXIT_FAILURE;
+	}
+	
+	// initialize system
+	log.vlog("Opening the item database ...");
+	auto itemdb = new ItemDatabase(cfg.databaseFilePath);
+	
 	log.vlog("All operations will be performed in: ", syncDir);
 	if (!exists(syncDir)) mkdirRecurse(syncDir);
 	chdir(syncDir);
@@ -257,7 +312,7 @@ int main(string[] args)
 	selectiveSync.setMask(cfg.getValue("skip_file"));
 	
 	// Initialise the sync engine
-	log.log("Initializing the Synchronization Engine ...");
+	log.logAndNotify("Initializing the Synchronization Engine ...");
 	auto sync = new SyncEngine(cfg, onedrive, itemdb, selectiveSync);
 	
 	try {
@@ -283,7 +338,7 @@ int main(string[] args)
 	if (checkMount) {
 		// we were asked to check the mounts
 		if (exists(syncDir ~ "/.nosync")) {
-			log.log("\nERROR: .nosync file found. Aborting synchronization process to safeguard data.");
+			log.logAndNotify("ERROR: .nosync file found. Aborting synchronization process to safeguard data.");
 			onedrive.http.shutdown();
 			return EXIT_FAILURE;
 		}
@@ -324,7 +379,7 @@ int main(string[] args)
 					// Does the directory we want to sync actually exist?
 					if (!exists(singleDirectory)){
 						// the requested directory does not exist .. 
-						log.log("The requested local directory does not exist. Please check ~/OneDrive/ for requested path");
+						log.logAndNotify("ERROR: The requested local directory does not exist. Please check ~/OneDrive/ for requested path");
 						onedrive.http.shutdown();
 						return EXIT_FAILURE;
 					}
@@ -336,7 +391,7 @@ int main(string[] args)
 		}
 			
 		if (monitor) {
-			log.log("Initializing monitor ...");
+			log.logAndNotify("Initializing monitor ...");
 			log.log("OneDrive monitor interval (seconds): ", to!long(cfg.getValue("monitor_interval")));
 			Monitor m = new Monitor(selectiveSync);
 			m.onDirCreated = delegate(string path) {
@@ -344,7 +399,7 @@ int main(string[] args)
 				try {
 					sync.scanForDifferences(path);
 				} catch(Exception e) {
-					log.log(e.msg);
+					log.logAndNotify("Cannot create remote directory: ", e.msg);
 				}
 			};
 			m.onFileChanged = delegate(string path) {
@@ -352,15 +407,21 @@ int main(string[] args)
 				try {
 					sync.scanForDifferences(path);
 				} catch(Exception e) {
-					log.log(e.msg);
+					log.logAndNotify("Cannot upload file changes/creation: ", e.msg);
 				}
 			};
 			m.onDelete = delegate(string path) {
 				log.vlog("[M] Item deleted: ", path);
 				try {
 					sync.deleteByPath(path);
+				} catch(SyncException e) {
+					if (e.msg == "The item to delete is not in the local database") {
+						log.vlog("Item cannot be deleted because not found in database");
+					} else {
+						log.logAndNotify("Cannot delete remote item: ", e.msg);
+					}
 				} catch(Exception e) {
-					log.log(e.msg);
+					log.logAndNotify("Cannot delete remote item: ", e.msg);
 				}
 			};
 			m.onMove = delegate(string from, string to) {
@@ -368,7 +429,7 @@ int main(string[] args)
 				try {
 					sync.uploadMoveItem(from, to);
 				} catch(Exception e) {
-					log.log(e.msg);
+					log.logAndNotify("Cannot move item:, ", e.msg);
 				}
 			};
 			// initialise the monitor class
@@ -386,16 +447,21 @@ int main(string[] args)
 							onedrive.http.shutdown();
 							return EXIT_FAILURE;
 						}
-						performSync(sync, singleDirectory, downloadOnly, localFirst, uploadOnly);
-						if (!downloadOnly) {
-							// discard all events that may have been generated by the sync
-							m.update(false);
+						try {
+							performSync(sync, singleDirectory, downloadOnly, localFirst, uploadOnly);
+							if (!downloadOnly) {
+								// discard all events that may have been generated by the sync
+								m.update(false);
+							}
+						} catch (CurlException e) {
+							// we already tried three times in the performSync routine
+							// if we still have problems, then the sync handle might have
+							// gone stale and we need to re-initialize the sync engine
+							log.log("Pesistent connection errors, reinitializing connection");
+							sync.reset();
 						}
 					} catch (CurlException e) {
-						// TODO better check of type of exception from Curl
-						// could be either timeout of operation of connection error
-						// No network connection to OneDrive Service
-						log.log("No network connection to Microsoft OneDrive Service, skipping sync");
+						log.log("Cannot initialize connection to OneDrive");
 					}
 					// performSync complete, set lastCheckTime to current time
 					lastCheckTime = MonoTime.currTime();
@@ -501,8 +567,12 @@ void performSync(SyncEngine sync, string singleDirectory, bool downloadOnly, boo
 			}
 			count = -1;
 		} catch (Exception e) {
-			if (++count == 3) throw e;
-			else log.log(e.msg);
+			if (++count == 3) {
+				log.log("Giving up on sync after three attempts: ", e.msg);
+				throw e;
+			} else 
+				log.log("Retry sync count: ", count, ": ", e.msg);
 		}
 	} while (count != -1);
 }
+

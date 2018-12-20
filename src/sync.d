@@ -180,6 +180,11 @@ final class SyncEngine
 		session = UploadSession(onedrive, cfg.uploadStateFilePath);
 	}
 
+	void reset()
+	{
+		initDone=false;
+	}
+
 	void init()
 	{
 		// Set accountType, defaultDriveId, defaultRootId & remainingFreeSpace once and reuse where possible
@@ -1177,6 +1182,12 @@ final class SyncEngine
 			maxPathLength = 430;
 		}
 		
+		// A short lived file that has disappeared will cause an error - is the path valid?
+		if (!exists(path)) {
+			log.log("Skipping item - has disappeared: ", path);
+			return;
+		}
+		
 		if(path.byGrapheme.walkLength < maxPathLength){
 			// path is less than maxPathLength
 
@@ -1232,6 +1243,12 @@ final class SyncEngine
 					uploadCreateDir(path);
 				}
 				// recursively traverse children
+				// the above operation takes time and the directory might have
+				// disappeared in the meantime
+				if (!exists(path)) {
+					log.vlog("Directory disappeared during upload: ", path);
+					return;
+				}
 				auto entries = dirEntries(path, SpanMode.shallow, false);
 				foreach (DirEntry entry; entries) {
 					uploadNewItems(entry.name);
@@ -1363,7 +1380,6 @@ final class SyncEngine
 	private void uploadNewFile(string path)
 	{
 		Item parent;
-		
 		// Check the database for the parent
 		//enforce(itemdb.selectByPath(dirName(path), defaultDriveId, parent), "The parent item is not in the local database");
 		if (itemdb.selectByPath(dirName(path), defaultDriveId, parent)) {
@@ -1417,23 +1433,23 @@ final class SyncEngine
 								// check what 'account type' this is as this issue only affects OneDrive Business so we need some extra logic here
 								if (accountType == "personal"){
 									// Original file upload logic
-									if (getSize(path) <= thresholdFileSize) {
+									if (thisFileSize <= thresholdFileSize) {
 										try {
-												response = onedrive.simpleUpload(path, parent.driveId, parent.id, baseName(path));
-											} catch (OneDriveException e) {
-												if (e.httpStatusCode == 504) {
-													// HTTP request returned status code 504 (Gateway Timeout)
-													// Try upload as a session
-													try {
-														response = session.upload(path, parent.driveId, parent.id, baseName(path));
-													} catch (OneDriveException e) {
-														// error uploading file
-														return;
-													}
+											response = onedrive.simpleUpload(path, parent.driveId, parent.id, baseName(path));
+										} catch (OneDriveException e) {
+											if (e.httpStatusCode == 504) {
+												// HTTP request returned status code 504 (Gateway Timeout)
+												// Try upload as a session
+												try {
+													response = session.upload(path, parent.driveId, parent.id, baseName(path));
+												} catch (OneDriveException e) {
+													// error uploading file
+													return;
 												}
-												else throw e;
 											}
-											writeln(" done.");
+											else throw e;
+										}
+										writeln(" done.");
 									} else {
 										// File larger than threshold - use a session to upload
 										writeln("");
@@ -1442,6 +1458,10 @@ final class SyncEngine
 											writeln(" done.");
 										} catch (OneDriveException e) {
 											// error uploading file
+											log.vlog("Upload failed with OneDriveException: ", e.msg);
+											return;
+										} catch (FileException e) {
+											log.vlog("Upload failed with File Exception: ", e.msg);
 											return;
 										}
 									}
@@ -1487,9 +1507,14 @@ final class SyncEngine
 								// Update the item's metadata on OneDrive
 								string id = response["id"].str;
 								string cTag = response["cTag"].str;
-								SysTime mtime = timeLastModified(path).toUTC();
-								// use the cTag instead of the eTag because OneDrive may update the metadata of files AFTER they have been uploaded
-								uploadLastModifiedTime(parent.driveId, id, cTag, mtime);
+								if (exists(path)) {
+									SysTime mtime = timeLastModified(path).toUTC();
+									// use the cTag instead of the eTag because OneDrive may update the metadata of files AFTER they have been uploaded
+									uploadLastModifiedTime(parent.driveId, id, cTag, mtime);
+								} else {
+									// will be removed in different event!
+									log.log("File disappeared after upload: ", path);
+								}
 								return;
 							} else {
 								// OneDrive Business Account - always use a session to upload
@@ -1657,6 +1682,10 @@ final class SyncEngine
 			uploadDeleteItem(fromItem, from);
 			uploadNewFile(to);
 		} else {
+			if (!exists(to)) {
+				log.vlog("uploadMoveItem target has disappeared: ", to);
+				return;
+			}
 			SysTime mtime = timeLastModified(to).toUTC();
 			JSONValue diff = [
 				"name": JSONValue(baseName(to)),
@@ -1731,9 +1760,9 @@ final class SyncEngine
 		JSONValue siteQuery = onedrive.o365SiteSearch(o365SharedLibraryName);
 		
 		foreach (searchResult; siteQuery["value"].array) {
-			// Need an 'exclusive' match here with as entered
-			if (o365SharedLibraryName == searchResult["description"].str){
-				// 'description' matches search request
+			// Need an 'exclusive' match here with o365SharedLibraryName as entered
+			if (o365SharedLibraryName == searchResult["displayName"].str){
+				// 'displayName' matches search request
 				site_id = searchResult["id"].str;
 				JSONValue siteDriveQuery = onedrive.o365SiteDrives(site_id);
 				foreach (driveResult; siteDriveQuery["value"].array) {

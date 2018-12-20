@@ -8,6 +8,7 @@
 * Support OneDrive for Business (part of Office 365)
 * Shared folders (OneDrive Personal)
 * SharePoint / Office 365 Shared Libraries (refer to README.Office365.md to configure)
+* Notifications
 
 ### What's missing:
 * While local changes are uploaded right away, remote changes are delayed
@@ -26,6 +27,10 @@ sudo apt install libcurl4-openssl-dev
 sudo apt install libsqlite3-dev
 curl -fsS https://dlang.org/install.sh | bash -s dmd
 ```
+For notifications the following is necessary:
+```
+sudo apt install libnotify-dev
+```
 
 ### Dependencies: Ubuntu - i386 / i686
 **Note:** Validated with `Linux ubuntu-i386-vm 4.13.0-36-generic #40~16.04.1-Ubuntu SMP Fri Feb 16 23:26:51 UTC 2018 i686 i686 i686 GNU/Linux` and DMD 2.081.1
@@ -34,6 +39,10 @@ sudo apt install build-essential
 sudo apt install libcurl4-openssl-dev
 sudo apt install libsqlite3-dev
 curl -fsS https://dlang.org/install.sh | bash -s dmd
+```
+For notifications the following is necessary:
+```
+sudo apt install libnotify-dev
 ```
 
 ### Dependencies: Debian - i386 / i686
@@ -56,6 +65,10 @@ wget http://ftp.us.debian.org/debian/pool/main/l/llvm-toolchain-5.0/libllvm5.0_5
 wget http://ftp.us.debian.org/debian/pool/main/n/ncurses/libtinfo6_6.1+20180714-1_i386.deb
 sudo dpkg -i ./*.deb
 ```
+For notifications the following is necessary:
+```
+sudo apt install libnotify-dev
+```
 
 ### Dependencies: Fedora < Version 18 / CentOS / RHEL
 ```
@@ -63,6 +76,10 @@ sudo yum groupinstall 'Development Tools'
 sudo yum install libcurl-devel
 sudo yum install sqlite-devel
 curl -fsS https://dlang.org/install.sh | bash -s dmd
+```
+For notifications the following is necessary:
+```
+sudo yum install libnotify-devel
 ```
 
 ### Dependencies: Fedora > Version 18
@@ -72,10 +89,18 @@ sudo dnf install libcurl-devel
 sudo dnf install sqlite-devel
 curl -fsS https://dlang.org/install.sh | bash -s dmd
 ```
+For notifications the following is necessary:
+```
+sudo yum install libnotify-devel
+```
 
 ### Dependencies: Arch Linux
 ```
 sudo pacman -S curl sqlite dmd
+```
+For notifications the following is necessary:
+```
+sudo pacman -S libnotify
 ```
 
 ### Dependencies: Raspbian (ARMHF)
@@ -85,6 +110,10 @@ sudo apt-get install libsqlite3-dev
 wget https://github.com/ldc-developers/ldc/releases/download/v1.11.0/ldc2-1.11.0-linux-armhf.tar.xz
 tar -xvf ldc2-1.11.0-linux-armhf.tar.xz
 ```
+For notifications the following is necessary:
+```
+sudo apt install libnotify-dev
+```
 
 ### Dependencies: Debian (ARM64)
 ```
@@ -92,6 +121,10 @@ sudo apt-get install libcurl4-openssl-dev
 sudo apt-get install libsqlite3-dev
 wget https://github.com/ldc-developers/ldc/releases/download/v1.11.0/ldc2-1.11.0-linux-aarch64.tar.xz
 tar -xvf ldc2-1.11.0-linux-aarch64.tar.xz
+```
+For notifications the following is necessary:
+```
+sudo apt install libnotify-dev
 ```
 
 ### Dependencies: Gentoo
@@ -101,10 +134,19 @@ sudo layman -a dlang
 ```
 Add ebuild from contrib/gentoo to a local overlay to use.
 
+For notifications the following is necessary:
+```
+sudo emerge x11-libs/libnotify
+```
+
 ### Dependencies: OpenSuSE Leap 15.0
 ```
 sudo zypper addrepo --check --refresh --name "D" http://download.opensuse.org/repositories/devel:/languages:/D/openSUSE_Leap_15.0/devel:languages:D.repo
 sudo zypper install git libcurl-devel sqlite3-devel D:dmd D:libphobos2-0_81 D:phobos-devel D:phobos-devel-static
+```
+For notifications the following is necessary:
+```
+sudo zypper install libnotify-devel
 ```
 
 ## Compilation & Installation
@@ -125,6 +167,13 @@ cd onedrive
 make
 sudo make install
 ```
+
+### Build options ###
+By passing `NOTIFICATIONS=1` to the `make` call, notifications via
+libnotify are enabled. Necessary libraries are 
+`gmodule-2.0`, `glib-2.0`, and `notify`. If these libraries are
+named differently on the build system, the make variable
+`DFLAGSNOTIFICATIONS` can be adjusted.
 
 ### Building using a different compiler (for example [LDC](https://wiki.dlang.org/LDC)):
 #### Debian - i386 / i686
@@ -171,6 +220,23 @@ The 'skilion' version contains a significant number of defect's in how the local
 After installing the application you must run it at least once from the terminal to authorize it.
 
 You will be asked to open a specific link using your web browser where you will have to login into your Microsoft Account and give the application the permission to access your files. After giving the permission, you will be redirected to a blank page. Copy the URI of the blank page into the application.
+
+### Show your configuration
+To validate your configuration the application will use, utilise the following:
+```
+onedrive --display-config
+```
+This will display all the pertinent runtime interpretation of the options and configuration you are using. This is helpful to validate the client will perform the operations your asking without performing a sync. Example output is as follows:
+```
+Config path                         = /home/alex/.config/onedrive
+Config file found in config path    = false
+Config option 'sync_dir'            = /home/alex/OneDrive
+Config option 'skip_file'           = ~*
+Config option 'skip_symlinks'       = false
+Config option 'monitor_interval'    = 45
+Config option 'log_dir'             = /var/log/onedrive/
+Selective sync configured           = false
+```
 
 ### Performing a sync
 By default all files are downloaded in `~/OneDrive`. After authorizing the application, a sync of your data can be performed by running:
@@ -397,17 +463,38 @@ systemctl status onedrive@username.service
 ```
 
 ### Using multiple OneDrive accounts
-You can run multiple instances of the application specifying a different config directory in order to handle multiple OneDrive accounts.
-To do this you can use the `--confdir` parameter.
-Here is an example:
-```sh
-onedrive --synchronize --monitor --confdir="~/.config/onedrivePersonal" &
-onedrive --synchronize --monitor --confdir="~/.config/onedriveWork" &
+You can run multiple instances of the application by specifying a different config directory in order to handle multiple OneDrive accounts. For example, if you have a work and a personal account, you can run the onedrive command using the --confdir parameter. Here is an example:
+
+```
+onedrive --synchronize --verbose --confdir="~/.config/onedrivePersonal" &
+onedrive --synchronize --verbose --confdir="~/.config/onedriveWork" &
+```
+or 
+```
+onedrive --monitor --verbose --confdir="~/.config/onedrivePersonal" &
+onedrive --monitor --verbose --confdir="~/.config/onedriveWork" &
 ```
 
-`--monitor` keeps the application running and monitoring for changes
+* `--synchronize` does a one-time sync
+* `--monitor` keeps the application running and monitoring for changes both local and remote
+* `&` puts the application in background and leaves the terminal interactive
 
-`&` puts the application in background and leaves the terminal interactive
+**Automatic syncing of both OneDrive accounts**
+
+In order to automatically start syncing your OneDrive accounts, you will need to create a service file for each account. From the `~/onedrive` folder:
+```
+cp onedrive.service onedrive-work.service
+```
+And edit the line beginning with `ExecStart` so that the command mirrors the one you used above:
+```
+ExecStart=/usr/local/bin/onedrive --monitor --confdir="/path/to/config/dir"
+```
+Then you can safely run these commands:
+```
+systemctl --user enable onedrive-work
+systemctl --user start onedrive-work
+```
+Repeat these steps for each OneDrive account that you wish to use.
 
 ## Extra
 
@@ -432,6 +519,8 @@ no option                      No sync and exit
             --create-directory Create a directory on OneDrive - no sync will be performed.
        --destination-directory Destination directory for renamed or move on OneDrive - no sync will be performed.
                  --debug-https Debug OneDrive HTTPS communication.
+       --disable-notifications Do not use desktop notifications in monitor mode.
+              --display-config Display what options the client will use as currently configured - no sync will be performed.
 -d             --download-only Only download remote changes
    --disable-upload-validation Disable upload validation when uploading to OneDrive
               --enable-logging Enable client activity to a separate log file
@@ -449,7 +538,7 @@ no option                      No sync and exit
                      --syncdir Set the directory used to sync the files that are synced
                  --synchronize Perform a synchronization
                  --upload-only Only upload to OneDrive, do not sync changes from OneDrive locally
--v                   --verbose Print more details, useful for debugging
+-v                   --verbose Print more details, useful for debugging (repeat for extra debugging)
                      --version Print the version and exit
 -h                      --help This help information.
 ```
