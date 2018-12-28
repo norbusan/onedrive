@@ -1,100 +1,79 @@
-import core.stdc.stdlib: EXIT_SUCCESS, EXIT_FAILURE;
+import core.stdc.stdlib: EXIT_SUCCESS, EXIT_FAILURE, exit;
 import core.memory, core.time, core.thread;
-import std.getopt, std.file, std.path, std.process, std.stdio, std.conv, std.algorithm.searching;
+import std.getopt, std.file, std.path, std.process, std.stdio, std.conv, std.algorithm.searching, std.string;
 import config, itemdb, monitor, onedrive, selective, sync, util;
 import std.net.curl: CurlException;
+import core.stdc.signal;
+import std.traits;
 static import log;
+
+OneDriveApi oneDrive;
+ItemDatabase itemDb;
 
 int main(string[] args)
 {
-	// Determine the users home directory. 
-	// Need to avoid using ~ here as expandTilde() below does not interpret correctly when running under init.d or systemd scripts
-	string homePath = "";
-
-	// Check for HOME environment variable
-	if (environment.get("HOME") != ""){
-		// Use HOME environment variable
-		homePath = environment.get("HOME");
-	} else {
-		if ((environment.get("SHELL") == "") && (environment.get("USER") == "")){
-			// No shell is set or username - observed case when running as systemd service under CentOS 7.x
-			homePath = "/root";
-		} else {
-			// A shell & valid user is set, but no HOME is set, use ~ which can be expanded
-			homePath = "~";
-		}
-	}
-
-	// Determine the base directory relative to which user specific configuration files should be stored.
-	string configDirBase = "";
-	if (environment.get("XDG_CONFIG_HOME") != ""){
-		configDirBase = environment.get("XDG_CONFIG_HOME");
-	} else {
-		// XDG_CONFIG_HOME does not exist on systems where X11 is not present - ie - headless systems / servers
-		configDirBase = homePath ~ "/.config";
-	}
+	// Disable buffering on stdout
+	stdout.setvbuf(0, _IONBF);
 	
-	// configuration directory
-	string configDirName = configDirBase ~ "/onedrive";
-	// only download remote changes
-	bool downloadOnly;
-	// override the sync directory
-	string syncDirName;
-	// enable monitor mode
-	bool monitor;
-	// force a full resync
-	bool resync;
-	// remove the current user and sync state
-	bool logout;
-	// enable verbose logging
-	bool verbose;
-	// print the access token
-	bool printAccessToken;
-	// print the version and exit
-	bool printVersion;
-	
-	// Additional options added to support MyNAS Storage Appliance
-	// Debug the HTTPS submit operations if required
-	bool debugHttp;
-	// Debug the HTTPS response operations if required
-	bool debugHttpSubmit;
-	// This allows for selective directory syncing instead of everything under ~/OneDrive/
-	string singleDirectory;
-	// Create a single root directory on OneDrive
-	string createDirectory;
-	// Remove a single directory on OneDrive
-	string removeDirectory;
-	// The source directory if we are using the OneDrive client to rename a directory
-	string sourceDirectory;
-	// The destination directory if we are using the OneDrive client to rename a directory
-	string destinationDirectory;
-	// Configure a flag to perform a sync
-	// This is beneficial so that if just running the client itself - without any options, or sync check, the client does not perform a sync
-	bool synchronize;
-	// Local sync - Upload local changes first before downloading changes from OneDrive
-	bool localFirst;
-	// Upload Only
-	bool uploadOnly;
+	// Application Option Variables
 	// Add a check mounts option to resolve https://github.com/abraunegg/onedrive/issues/8
 	bool checkMount;
-	// Add option to skip symlinks
-	bool skipSymlinks;
-	// Add option for no remote delete
-	bool noRemoteDelete;
-	// Are we able to reach the OneDrive Service
-	bool online = false;
-	// Do we enable a log file
-	bool enableLogFile = false;
-	// Does the user want to disable upload validation - https://github.com/abraunegg/onedrive/issues/205
-	// SharePoint will associate some metadata from the library the file is uploaded to directly in the file - thus change file size & checksums
-	bool disableUploadValidation = false;
-	// SharePoint / Office 365 Shared Library name to query
-	string o365SharedLibraryName;
+	// configuration directory
+	string configDirName;
+	// Create a single root directory on OneDrive
+	string createDirectory;
+	// The destination directory if we are using the OneDrive client to rename a directory
+	string destinationDirectory;
+	// Debug the HTTPS submit operations if required
+	bool debugHttp;
 	// Do not use notifications in monitor mode
 	bool disableNotifications = false;
 	// Display application configuration but do not sync
 	bool displayConfiguration = false;
+	// Display sync status
+	bool displaySyncStatus = false;
+	// only download remote changes
+	bool downloadOnly;
+	// Does the user want to disable upload validation - https://github.com/abraunegg/onedrive/issues/205
+	// SharePoint will associate some metadata from the library the file is uploaded to directly in the file - thus change file size & checksums
+	bool disableUploadValidation = false;
+	// Do we enable a log file
+	bool enableLogFile = false;
+	// SharePoint / Office 365 Shared Library name to query
+	string o365SharedLibraryName;
+	// Local sync - Upload local changes first before downloading changes from OneDrive
+	bool localFirst;
+	// remove the current user and sync state
+	bool logout;
+	// enable monitor mode
+	bool monitor;
+	// Add option for no remote delete
+	bool noRemoteDelete;
+	// print the access token
+	bool printAccessToken;
+	// force a full resync
+	bool resync;
+	// Remove a single directory on OneDrive
+	string removeDirectory;
+	// This allows for selective directory syncing instead of everything under ~/OneDrive/
+	string singleDirectory;
+	// Add option to skip symlinks
+	bool skipSymlinks;
+	// The source directory if we are using the OneDrive client to rename a directory
+	string sourceDirectory;
+	// override the sync directory
+	string syncDirName;
+	// Configure a flag to perform a sync
+	// This is beneficial so that if just running the client itself - without any options, or sync check, the client does not perform a sync
+	bool synchronize;
+	// Upload Only
+	bool uploadOnly;
+	// enable verbose logging
+	bool verbose;
+	// print the version and exit
+	bool printVersion;
 	
+	// Application Startup option validation
 	try {
 		auto opt = getopt(
 			args,
@@ -107,6 +86,7 @@ int main(string[] args)
 			"debug-https", "Debug OneDrive HTTPS communication.", &debugHttp,
 			"disable-notifications", "Do not use desktop notifications in monitor mode.", &disableNotifications,
 			"display-config", "Display what options the client will use as currently configured - no sync will be performed.", &displayConfiguration,
+			"display-sync-status", "Display the sync status of the client - no sync will be performed.", &displaySyncStatus,
 			"download-only|d", "Only download remote changes", &downloadOnly,
 			"disable-upload-validation", "Disable upload validation when uploading to OneDrive", &disableUploadValidation,
 			"enable-logging", "Enable client activity to a separate log file", &enableLogFile,
@@ -121,18 +101,14 @@ int main(string[] args)
 			"single-directory", "Specify a single local directory within the OneDrive root to sync.", &singleDirectory,
 			"skip-symlinks", "Skip syncing of symlinks", &skipSymlinks,
 			"source-directory", "Source directory to rename or move on OneDrive - no sync will be performed.", &sourceDirectory,
-			"syncdir", "Set the directory used to sync the files that are synced", &syncDirName,
+			"syncdir", "Specify the local directory used for synchronization to OneDrive", &syncDirName,
 			"synchronize", "Perform a synchronization", &synchronize,
 			"upload-only", "Only upload to OneDrive, do not sync changes from OneDrive locally", &uploadOnly,
 			"verbose|v+", "Print more details, useful for debugging (repeat for extra debugging)", &log.verbose,
 			"version", "Print the version and exit", &printVersion
 		);
 		if (opt.helpWanted) {
-			defaultGetoptPrinter(
-				"Usage: onedrive [OPTION]...\n\n" ~
-				"no option        No sync and exit",
-				opt.options
-			);
+			outputLongHelp(opt.options);
 			return EXIT_SUCCESS;
 		}
 	} catch (GetOptException e) {
@@ -146,17 +122,74 @@ int main(string[] args)
 		return EXIT_FAILURE;
 	}
 
-	// disable buffering on stdout
-	stdout.setvbuf(0, _IONBF);
+	// Main function variables
+	string homePath = "";
+	string configDirBase = "";
+	// Debug the HTTPS response operations if required
+	bool debugHttpSubmit;
+	// Are we able to reach the OneDrive Service
+	bool online = false;
+	
+	// Determine the users home directory. 
+	// Need to avoid using ~ here as expandTilde() below does not interpret correctly when running under init.d or systemd scripts
+	// Check for HOME environment variable
+	if (environment.get("HOME") != ""){
+		// Use HOME environment variable
+		log.vdebug("homePath: HOME environment variable set");
+		homePath = environment.get("HOME");
+	} else {
+		if ((environment.get("SHELL") == "") && (environment.get("USER") == "")){
+			// No shell is set or username - observed case when running as systemd service under CentOS 7.x
+			log.vdebug("homePath: WARNING - no HOME environment variable set");
+			log.vdebug("homePath: WARNING - no SHELL environment variable set");
+			log.vdebug("homePath: WARNING - no USER environment variable set");
+			homePath = "/root";
+		} else {
+			// A shell & valid user is set, but no HOME is set, use ~ which can be expanded
+			log.vdebug("homePath: WARNING - no HOME environment variable set");
+			homePath = "~";
+		}
+	}
+	
+	// Output homePath calculation
+	log.vdebug("homePath: ", homePath);
 
+	// Determine the base directory relative to which user specific configuration files should be stored.
+	if (environment.get("XDG_CONFIG_HOME") != ""){
+		log.vdebug("configDirBase: XDG_CONFIG_HOME environment variable set");
+		configDirBase = environment.get("XDG_CONFIG_HOME");
+	} else {
+		// XDG_CONFIG_HOME does not exist on systems where X11 is not present - ie - headless systems / servers
+		log.vdebug("configDirBase: WARNING - no XDG_CONFIG_HOME environment variable set");
+		configDirBase = homePath ~ "/.config";
+	}
+	
+	// Output configDirBase calculation
+	log.vdebug("configDirBase: ", configDirBase);
+	
+	// Determine the correct configuration directory to use
+	if (configDirName != "") {
+		// A CLI 'confdir' was passed in
+		log.vdebug("configDirName: CLI override to set configDirName to: ", configDirName);
+		if (canFind(configDirName,"~")) {
+			// A ~ was found
+			log.vdebug("configDirName: A '~' was found in configDirName, using the calculated 'homePath' to replace '~'");
+			configDirName = homePath ~ strip(configDirName,"~","~");
+		}
+	} else {
+		// Set the default application configuration directory
+		log.vdebug("configDirName: Configuring application to use default config path");
+		// configDirBase contains the correct path so we do not need to check for presence of '~'
+		configDirName = configDirBase ~ "/onedrive";
+	}
+	
 	if (printVersion) {
 		std.stdio.write("onedrive ", import("version"));
 		return EXIT_SUCCESS;
 	}
 
-	// load configuration
+	// load application configuration
 	log.vlog("Loading config ...");
-	configDirName = configDirName.expandTilde().absolutePath();
 	log.vlog("Using Config Dir: ", configDirName);
 	if (!exists(configDirName)) mkdirRecurse(configDirName);
 	auto cfg = new config.Config(configDirName);
@@ -166,33 +199,50 @@ int main(string[] args)
 		return EXIT_FAILURE;
 	}
 	
-	// Set the local path OneDrive root
-	if (syncDirName){
-		// The user passed in an alternate sync_dir
+	// command line parameters to override default 'config' & take precedence
+	// Set the client to skip symbolic links if --skip-symlinks was passed in
+	if (skipSymlinks) {
+		// The user passed in an alternate skip_symlinks as to what was either in 'config' file or application default
+		log.vdebug("CLI override to set skip_symlinks to: true");
+		cfg.setValue("skip_symlinks", "true");
+	}
+	
+	// Set the OneDrive Local Sync Directory if was passed in via --syncdir
+	if (syncDirName) {
+		// The user passed in an alternate sync_dir as to what was either in 'config' file or application default
+		// Do not expandTilde here as we do not know if we reliably can
+		log.vdebug("CLI override to set sync_dir to: ", syncDirName);
 		cfg.setValue("sync_dir", syncDirName);
 	}
 	
+	// sync_dir environment handling to handle ~ expansion properly
 	string syncDir;
 	if ((environment.get("SHELL") == "") && (environment.get("USER") == "")){
-		// No shell or user set, so expandTilde() will fail - usually headless system running under init.d / systemd
-		// Did the user specify a 'different' sync dir by passing a value in?
-		if (syncDirName){
-			// was there a ~ in the passed in state? it will not work via init.d / systemd
-			if (canFind(cfg.getValue("sync_dir"),"~")) {
-				// A ~ was found
-				syncDir = homePath ~ "/OneDrive";
-			} else {
-				// No ~ found in passed in state, use as is
-				syncDir = cfg.getValue("sync_dir");
-			}
+		log.vdebug("sync_dir: No SHELL or USER environment variable configuration detected");
+		// No shell or user set, so expandTilde() will fail - usually headless system running under init.d / systemd or potentially Docker
+		// Does the 'currently configured' sync_dir include a ~
+		if (canFind(cfg.getValue("sync_dir"),"~")) {
+			// A ~ was found
+			log.vdebug("sync_dir: A '~' was found in sync_dir, using the calculated 'homePath' to replace '~'");
+			syncDir = homePath ~ strip(cfg.getValue("sync_dir"),"~","~");
 		} else {
-			// need to create a default as expanding ~ will not work
-			syncDir = homePath ~ "/OneDrive";
+			// No ~ found in sync_dir, use as is
+			log.vdebug("sync_dir: Getting syncDir from config value sync_dir");
+			syncDir = cfg.getValue("sync_dir");
 		}
 	} else {
-		// A shell and user is set, expand any ~ as this will be expanded if present
-		syncDir = expandTilde(cfg.getValue("sync_dir"));
+		// A shell and user is set, expand any ~ as this will be expanded correctly if present
+		log.vdebug("sync_dir: Getting syncDir from config value sync_dir");
+		if (canFind(cfg.getValue("sync_dir"),"~")) {
+			log.vdebug("sync_dir: A '~' was found in configured sync_dir, automatically expanding as SHELL and USER environment variable is set");
+			syncDir = expandTilde(cfg.getValue("sync_dir"));
+		} else {
+			syncDir = cfg.getValue("sync_dir");
+		}
 	}
+	
+	// vdebug syncDir as set and calculated
+	log.vdebug("syncDir: ", syncDir);
 	
 	// Configure logging if enabled
 	if (enableLogFile){
@@ -205,10 +255,6 @@ int main(string[] args)
 	// Configure whether notifications are used
 	log.setNotifications(monitor && !disableNotifications);
 	
-	// command line parameters override the config
-	if (syncDirName) cfg.setValue("sync_dir", syncDirName.expandTilde().absolutePath());
-	if (skipSymlinks) cfg.setValue("skip_symlinks", "true");
-  
 	// upgrades
 	if (exists(configDirName ~ "/items.db")) {
 		remove(configDirName ~ "/items.db");
@@ -274,12 +320,12 @@ int main(string[] args)
 	}
 
 	// Initialize OneDrive, check for authorization
-	auto onedrive = new OneDriveApi(cfg, debugHttp);
-	onedrive.printAccessToken = printAccessToken;
-	if (!onedrive.init()) {
+	oneDrive = new OneDriveApi(cfg, debugHttp);
+	oneDrive.printAccessToken = printAccessToken;
+	if (!oneDrive.init()) {
 		log.error("Could not initialize the OneDrive API");
 		// workaround for segfault in std.net.curl.Curl.shutdown() on exit
-		onedrive.http.shutdown();
+		oneDrive.http.shutdown();
 		return EXIT_FAILURE;
 	}
 	
@@ -292,23 +338,26 @@ int main(string[] args)
 	
 	// create-directory, remove-directory, source-directory, destination-directory 
 	// are activities that dont perform a sync no error message for these items either
-	if (((createDirectory != "") || (removeDirectory != "")) || ((sourceDirectory != "") && (destinationDirectory != "")) || (o365SharedLibraryName != "")) {
+	if (((createDirectory != "") || (removeDirectory != "")) || ((sourceDirectory != "") && (destinationDirectory != "")) || (o365SharedLibraryName != "") || (displaySyncStatus == true)) {
 		performSyncOK = true;
 	}
 	
 	if (!performSyncOK) {
 		writeln("\n--synchronize or --monitor missing from your command options or use --help for further assistance\n");
 		writeln("No OneDrive sync will be performed without either of these two arguments being present\n");
-		onedrive.http.shutdown();
+		oneDrive.http.shutdown();
 		return EXIT_FAILURE;
 	}
 	
 	// initialize system
 	log.vlog("Opening the item database ...");
-	auto itemdb = new ItemDatabase(cfg.databaseFilePath);
+	itemDb = new ItemDatabase(cfg.databaseFilePath);
 	
 	log.vlog("All operations will be performed in: ", syncDir);
-	if (!exists(syncDir)) mkdirRecurse(syncDir);
+	if (!exists(syncDir)) {
+		log.vdebug("syncDir: Configured syncDir is missing. Creating: ", syncDir);
+		mkdirRecurse(syncDir);
+	}
 	chdir(syncDir);
 	
 	// Configure selective sync by parsing and getting a regex for skip_file config component
@@ -318,17 +367,17 @@ int main(string[] args)
 	
 	// Initialise the sync engine
 	log.logAndNotify("Initializing the Synchronization Engine ...");
-	auto sync = new SyncEngine(cfg, onedrive, itemdb, selectiveSync);
+	auto sync = new SyncEngine(cfg, oneDrive, itemDb, selectiveSync);
 	
 	try {
 		if (!initSyncEngine(sync)) {
-			onedrive.http.shutdown();
+			oneDrive.http.shutdown();
 			return EXIT_FAILURE;
 		}
 	} catch (CurlException e) {
 		if (!monitor) {
 			log.log("\nNo internet connection.");
-			onedrive.http.shutdown();
+			oneDrive.http.shutdown();
 			return EXIT_FAILURE;
 		}
 	}
@@ -344,7 +393,7 @@ int main(string[] args)
 		// we were asked to check the mounts
 		if (exists(syncDir ~ "/.nosync")) {
 			log.logAndNotify("ERROR: .nosync file found. Aborting synchronization process to safeguard data.");
-			onedrive.http.shutdown();
+			oneDrive.http.shutdown();
 			return EXIT_FAILURE;
 		}
 	}
@@ -374,6 +423,20 @@ int main(string[] args)
 		sync.querySiteCollectionForDriveID(o365SharedLibraryName);
 	}
 	
+	// Are we displaying the sync status of the client?
+	if (displaySyncStatus) {
+		string remotePath = "/";
+		string localPath = ".";
+		
+		// Are we doing a single directory check?
+		if (singleDirectory != ""){
+			// Need two different path strings here
+			remotePath = singleDirectory;
+			localPath = singleDirectory;
+		}
+		sync.queryDriveForChanges(remotePath);
+	}
+	
 	// Are we performing a sync, resync or monitor operation?
 	if ((synchronize) || (resync) || (monitor)) {
 
@@ -385,7 +448,7 @@ int main(string[] args)
 					if (!exists(singleDirectory)){
 						// the requested directory does not exist .. 
 						log.logAndNotify("ERROR: The requested local directory does not exist. Please check ~/OneDrive/ for requested path");
-						onedrive.http.shutdown();
+						oneDrive.http.shutdown();
 						return EXIT_FAILURE;
 					}
 				}
@@ -437,6 +500,9 @@ int main(string[] args)
 					log.logAndNotify("Cannot move item:, ", e.msg);
 				}
 			};
+			signal(SIGINT, &exitHandler);
+			signal(SIGTERM, &exitHandler);
+
 			// initialise the monitor class
 			if (cfg.getValue("skip_symlinks") == "true") skipSymlinks = true;
 			if (!downloadOnly) m.init(cfg, verbose, skipSymlinks);
@@ -447,9 +513,13 @@ int main(string[] args)
 				if (!downloadOnly) m.update(online);
 				auto currTime = MonoTime.currTime();
 				if (currTime - lastCheckTime > checkInterval) {
+					// log.logAndNotify("DEBUG trying to create checkpoint");
+					// auto res = itemdb.db_checkpoint();
+					// log.logAndNotify("Checkpoint return: ", res);
+					// itemdb.dump_open_statements();
 					try {
 						if (!initSyncEngine(sync)) {
-							onedrive.http.shutdown();
+							oneDrive.http.shutdown();
 							return EXIT_FAILURE;
 						}
 						try {
@@ -478,7 +548,7 @@ int main(string[] args)
 	}
 
 	// workaround for segfault in std.net.curl.Curl.shutdown() on exit
-	onedrive.http.shutdown();
+	oneDrive.http.shutdown();
 	return EXIT_SUCCESS;
 }
 
@@ -579,5 +649,63 @@ void performSync(SyncEngine sync, string singleDirectory, bool downloadOnly, boo
 				log.log("Retry sync count: ", count, ": ", e.msg);
 		}
 	} while (count != -1);
+}
+
+// getting around the @nogc problem
+// https://p0nce.github.io/d-idioms/#Bypassing-@nogc
+auto assumeNoGC(T) (T t) if (isFunctionPointer!T || isDelegate!T)
+{
+	enum attrs = functionAttributes!T | FunctionAttribute.nogc;
+	return cast(SetFunctionAttributes!(T, functionLinkage!T, attrs)) t;
+}
+
+extern(C) nothrow @nogc @system void exitHandler(int value) {
+	try {
+		assumeNoGC ( () {
+			log.log("Got termination signal, shutting down db connection");
+			// make sure the .wal file is incorporated into the main db
+			destroy(itemDb);
+			// workaround for segfault in std.net.curl.Curl.shutdown() on exit
+			oneDrive.http.shutdown();
+		})();
+	} catch(Exception e) {}
+	exit(0);
+}
+void outputLongHelp(Option[] opt)
+{
+	auto argsNeedingOptions = [
+		"--confdir",
+		"--create-directory",
+		"--destination-directory",
+		"--get-O365-drive-id",
+		"--remove-directory",
+		"--single-directory",
+		"--source-directory",
+		"--syncdir" ];
+	writeln(`OneDrive - a client for OneDrive Cloud Services
+
+Usage:
+  onedrive [options] --synchronize
+      Do a one time synchronization
+  onedrive [options] --monitor
+      Monitor filesystem and sync regularly
+  onedrive [options] --display-config
+      Display the currently used configuration
+  onedrive [options] --display-sync-status
+      Query OneDrive service and report on pending changes
+  onedrive -h | --help
+      Show this help screen
+  onedrive --version
+      Show version
+
+Options:
+`);
+	foreach (it; opt) {
+		writefln("  %s%s%s%s\n      %s",
+				it.optShort == "" ? "" : it.optShort ~ " ",
+				it.optLong,
+				argsNeedingOptions.canFind(it.optLong) ? " ARG" : "",
+				it.required ? " (required)" : "", it.help);
+	}
 }
 
