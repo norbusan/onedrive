@@ -55,7 +55,8 @@ function setup_arm64_chroot {
 	rm -rf ldc2-1.11.0-linux-aarch64.tar.xz
 	
 	# ARM64 qemu-debootstrap needs to be 1.0.78, Trusty is 1.0.59
-	sudo echo "deb http://archive.ubuntu.com/ubuntu xenial main restricted universe multiverse" >> /etc/apt/sources.list
+	#sudo echo "deb http://archive.ubuntu.com/ubuntu xenial main restricted universe multiverse" >> /etc/apt/sources.list
+	echo "deb http://archive.ubuntu.com/ubuntu xenial main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list > /dev/null
 	sudo apt-get update
 	sudo apt-get install -t xenial debootstrap
 	
@@ -112,8 +113,8 @@ function configure_chroot {
 
 function build_onedrive {
 	# Depending on architecture, build onedrive using applicable tool
-	echo `uname -a`
-	HOMEDIR=`pwd`
+	echo "$(uname -a)"
+	HOMEDIR=$(pwd)
 	if [ "${ARCH}" = "x64" ]; then
 		# Build on x86_64 as normal
 		make clean; make;

@@ -44,6 +44,11 @@ private bool isItemRemote(const ref JSONValue item)
 	return ("remoteItem" in item) != null;
 }
 
+private bool hasParentReference(const ref JSONValue item)
+{
+	return ("parentReference" in item) != null;
+}
+
 private bool hasParentReferenceId(const ref JSONValue item)
 {
 	return ("id" in item["parentReference"]) != null;
@@ -62,6 +67,11 @@ private bool isMalware(const ref JSONValue item)
 private bool hasFileSize(const ref JSONValue item)
 {
 	return ("size" in item) != null;
+}
+
+private bool hasId(const ref JSONValue item)
+{
+	return ("id" in item) != null;
 }
 
 // construct an Item struct from a JSON driveItem
@@ -469,7 +479,7 @@ final class SyncEngine
 			// valid response from onedrive.getPathDetailsById(driveId, id) - a JSON item object present
 			if ((idDetails["id"].str == id) && (!isItemFile(idDetails))){
 				// Is a Folder or Remote Folder
-				syncFolderName = encodeComponent(idDetails["name"].str);
+				syncFolderName = idDetails["name"].str;
 			}
 			// Is this a 'local' or 'remote' item?
 			if(isItemRemote(idDetails)){
@@ -485,6 +495,14 @@ final class SyncEngine
 					syncFolderPath = "";
 					syncFolderChildPath = "";
 				}
+			}
+			
+			// Debug Output
+			log.vdebug("Sync Folder Name: ", syncFolderName);
+			// Debug Output of path if only set, generally only set if using --single-directory
+			if (hasParentReferencePath(idDetails)) {
+				log.vdebug("Sync Folder Path: ", syncFolderPath);
+				log.vdebug("Sync Folder Child Path: ", syncFolderChildPath);
 			}
 		}
 		
@@ -503,11 +521,26 @@ final class SyncEngine
 				// Use the 'id' that was passed in (folderId)
 				idToQuery = id;
 			}
-		
+			
 			try {
 				// Fetch the changes relative to the path id we want to query
 				changes = onedrive.viewChangesById(driveId, idToQuery, deltaLink);
 			} catch (OneDriveException e) {
+				// OneDrive threw an error
+				log.vdebug("OneDrive threw an error when querying for these changes:");
+				log.vdebug("driveId: ", driveId);
+				log.vdebug("idToQuery: ", idToQuery);
+				log.vdebug("deltaLink: ", deltaLink);
+				
+				// HTTP request returned status code 404 (Not Found)
+				if (e.httpStatusCode == 404) {
+					// Stop application
+					log.log("\n\nOneDrive returned a 'HTTP 404 - Item not found'");
+					log.log("The item id to query was not found on OneDrive");
+					log.log("\nRemove your '", cfg.databaseFilePath, "' file and try to sync again\n");
+					return;
+				}
+				
 				// HTTP request returned status code 410 (The requested resource is no longer available at the server)
 				if (e.httpStatusCode == 410) {
 					log.vlog("Delta link expired, re-syncing...");
@@ -515,12 +548,12 @@ final class SyncEngine
 					continue;
 				}
 				
+				// HTTP request returned status code 500 (Internal Server Error)
 				if (e.httpStatusCode == 500) {
-					// HTTP request returned status code 500 (Internal Server Error)
-					// Exit Application
+					// Stop application
 					log.log("\n\nOneDrive returned a 'HTTP 500 - Internal Server Error'");
 					log.log("This is a OneDrive API Bug - https://github.com/OneDrive/onedrive-api-docs/issues/844\n\n");
-					log.log("Remove your 'items.sqlite3' file and try to sync again\n\n");
+					log.log("\nRemove your '", cfg.databaseFilePath, "' file and try to sync again\n");
 					return;
 				}
 				
@@ -531,15 +564,31 @@ final class SyncEngine
 					applyDifferences(driveId, idToQuery);
 				}
 				
-				else throw e;
+				else {
+					// Default operation if not 404, 410, 500, 504 errors
+					log.log("\n\nOneDrive returned an error with the following message:\n");
+					auto errorArray = splitLines(e.msg);
+					log.log("Error Message: ", errorArray[0]);
+					// extract 'message' as the reason
+					JSONValue errorMessage = parseJSON(replace(e.msg, errorArray[0], ""));
+					log.log("Error Reason:  ", errorMessage["error"]["message"].str);
+					log.log("\nRemove your '", cfg.databaseFilePath, "' file and try to sync again\n");
+					return;
+				}
 			}
 			
 			// Are there any changes to process?
 			if (("value" in changes) != null) {
 				// There are valid changes
+				log.vdebug("Number of changes from OneDrive to process: ", count(changes["value"].array));
+				
 				foreach (item; changes["value"].array) {
 					bool isRoot = false;
 					string thisItemPath;
+					
+					// Change as reported by OneDrive
+					log.vdebug("------------------------------------------------------------------");
+					log.vdebug("OneDrive Change: ", item);
 					
 					// Deleted items returned from onedrive.viewChangesById (/delta) do not have a 'name' attribute
 					// Thus we cannot name check for 'root' below on deleted items
@@ -556,6 +605,7 @@ final class SyncEngine
 					// How do we handle this change?
 					if (isRoot || !hasParentReferenceId(item) || isItemDeleted(item)){
 						// Is a root item, has no id in parentReference or is a OneDrive deleted item
+						log.vdebug("Handling change as 'root item', has no parent reference or is a deleted item");
 						applyDifference(item, driveId, isRoot);
 					} else {
 						// What is this item's path?
@@ -564,6 +614,19 @@ final class SyncEngine
 						} else {
 							thisItemPath = "";
 						}
+						
+						// Debug output of change evaluation items
+						log.vdebug("'search id'                                       = ", id);
+						log.vdebug("'parentReference id'                              = ", item["parentReference"]["id"].str);
+						log.vdebug("syncFolderPath                                    = ", syncFolderPath);
+						log.vdebug("syncFolderChildPath                               = ", syncFolderChildPath);
+						log.vdebug("thisItemId                                        = ", item["id"].str);
+						log.vdebug("thisItemPath                                      = ", thisItemPath);
+						log.vdebug("'item id' matches search 'id'                     = ", (item["id"].str == id));
+						log.vdebug("'parentReference id' matches search 'id'          = ", (item["parentReference"]["id"].str == id));
+						log.vdebug("'item path' contains 'syncFolderChildPath'        = ", (canFind(thisItemPath, syncFolderChildPath)));
+						log.vdebug("'item path' contains search 'id'                  = ", (canFind(thisItemPath, id)));
+						
 						// Check this item's path to see if this is a change on the path we want:
 						// 1. 'item id' matches 'id'
 						// 2. 'parentReference id' matches 'id'
@@ -572,6 +635,7 @@ final class SyncEngine
 						
 						if ( (item["id"].str == id) || (item["parentReference"]["id"].str == id) || (canFind(thisItemPath, syncFolderChildPath)) || (canFind(thisItemPath, id)) ){
 							// This is a change we want to apply
+							log.vdebug("Change matches search criteria to apply");
 							applyDifference(item, driveId, isRoot);
 						} else {
 							// No item ID match or folder sync match
@@ -629,6 +693,7 @@ final class SyncEngine
 	// process the change of a single DriveItem
 	private void applyDifference(JSONValue driveItem, string driveId, bool isRoot)
 	{
+		// Format the OneDrive change into a consumable object for the database
 		Item item = makeItem(driveItem);
 		
 		// Reset the malwareDetected flag for this item
@@ -637,29 +702,46 @@ final class SyncEngine
 		// Reset the downloadFailed flag for this item
 		downloadFailed = false;
 		
-		if (isItemRoot(driveItem) || !item.parentId || isRoot) {
-			item.parentId = null; // ensures that it has no parent
-			item.driveId = driveId; // HACK: makeItem() cannot set the driveId property of the root
-			itemdb.upsert(item);
-			return;
+		if(isItemDeleted(driveItem)){
+			// Change is to delete an item
+			log.vdebug("Remote deleted item");
+		} else {
+			// Is the change from OneDrive a 'root' item
+			// The change should be considered a 'root' item if:
+			// 1. Contains a ["root"] element
+			// 2. Has no ["parentReference"]["id"] ... #323 & #324 highlighted that this is false as some 'root' shared objects now can have an 'id' element .. OneDrive API change
+			// 2. Has no ["parentReference"]["path"]
+			// 3. Was detected by an input flag as to be handled as a root item regardless of actual status
+			if (isItemRoot(driveItem) || !hasParentReferencePath(driveItem) || isRoot) {
+				log.vdebug("Handing a OneDrive 'root' change");
+				item.parentId = null; // ensures that it has no parent
+				item.driveId = driveId; // HACK: makeItem() cannot set the driveId property of the root
+				log.vdebug("Update/Insert local database with item details");
+				itemdb.upsert(item);
+				log.vdebug("item details: ", item);
+				return;
+			}
 		}
 
 		bool unwanted;
 		unwanted |= skippedItems.find(item.parentId).length != 0;
+		if (unwanted) log.vdebug("Flagging as unwanted: find(item.parentId).length != 0");
 		unwanted |= selectiveSync.isNameExcluded(item.name);
+		if (unwanted) log.vdebug("Flagging as unwanted: item name is excluded: ", item.name);
 
 		// check the item type
 		if (!unwanted) {
 			if (isItemFile(driveItem)) {
-				//log.vlog("The item we are syncing is a file");
+				log.vdebug("The item we are syncing is a file");
 			} else if (isItemFolder(driveItem)) {
-				//log.vlog("The item we are syncing is a folder");
+				log.vdebug("The item we are syncing is a folder");
 			} else if (isItemRemote(driveItem)) {
-				//log.vlog("The item we are syncing is a remote item");
+				log.vdebug("The item we are syncing is a remote item");
 				assert(isItemFolder(driveItem["remoteItem"]), "The remote item is not a folder");
 			} else {
 				log.vlog("This item type (", item.name, ") is not supported");
 				unwanted = true;
+				log.vdebug("Flagging as unwanted: item type is not supported");
 			}
 		}
 
@@ -667,18 +749,21 @@ final class SyncEngine
 		string path;
 		if (!unwanted) {
 			// Is the item in the local database
-			if (itemdb.idInLocalDatabase(item.driveId, item.parentId)){				
+			if (itemdb.idInLocalDatabase(item.driveId, item.parentId)){
+				// compute the item path to see if the path is excluded
 				path = itemdb.computePath(item.driveId, item.parentId) ~ "/" ~ item.name;
 				path = buildNormalizedPath(path);
 				unwanted = selectiveSync.isPathExcluded(path);
+				if (unwanted) log.vdebug("OneDrive change path is to be excluded by user configuration: ", path);
 			} else {
+				log.vdebug("Flagging as unwanted: item.driveId (", item.driveId,"), item.parentId (", item.parentId,") not in local database");
 				unwanted = true;
 			}
 		}
 
 		// skip unwanted items early
 		if (unwanted) {
-			//log.vlog("Filtered out");
+			log.vdebug("Skipping OneDrive change as this is determined to be unwanted");
 			skippedItems ~= item.id;
 			return;
 		}
@@ -690,8 +775,7 @@ final class SyncEngine
 		// check if the item is going to be deleted
 		if (isItemDeleted(driveItem)) {
 			// item.name is not available, so we get a bunch of meaningless log output
-			// will fix this with wider logging changes being worked on
-			//log.vlog("This item is marked for deletion:", item.name);
+			// Item name we will attempt to delete will be printed out later
 			if (cached) {
 				// flag to delete
 				idsToDelete ~= [item.driveId, item.id];
@@ -718,8 +802,10 @@ final class SyncEngine
 
 		// update the item
 		if (cached) {
+			log.vdebug("OneDrive change is an update to an existing local item");
 			applyChangedItem(oldItem, oldPath, item, path);
 		} else {
+			log.vdebug("OneDrive change is a new local item");
 			applyNewItem(item, path);
 		}
 
@@ -728,10 +814,14 @@ final class SyncEngine
 			// if the file was detected as malware and NOT downloaded, we dont want to falsify the DB as downloading it as otherwise the next pass will think it was deleted, thus delete the remote item
 			// Likewise if the download failed, we dont want to falsify the DB as downloading it as otherwise the next pass will think it was deleted, thus delete the remote item 
 			if (cached) {
+				log.vdebug("Updating local database with item details");
 				itemdb.update(item);
 			} else {
+				log.vdebug("Inserting item details to local database");
 				itemdb.insert(item);
 			}
+			// What was the item that was saved
+			log.vdebug("item details: ", item);
 		}
 	}
 
@@ -1107,7 +1197,8 @@ final class SyncEngine
 									if (e.httpStatusCode == 412) {
 										// HTTP request returned status code 412 - ETag does not match current item's value
 										// Delete record from the local database - file will be uploaded as a new file
-										log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' - gracefully handling error");
+										log.vdebug("Simple Upload Replace Failed - OneDrive eTag / cTag match issue");
+										log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' - gracefully handling error. Will upload as new file.");
 										itemdb.deleteById(item.driveId, item.id);
 										return;
 									}
@@ -1128,7 +1219,8 @@ final class SyncEngine
 									if (e.httpStatusCode == 412) {
 										// HTTP request returned status code 412 - ETag does not match current item's value
 										// Delete record from the local database - file will be uploaded as a new file
-										log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' - gracefully handling error");
+										log.vdebug("Simple Upload Replace Failed - OneDrive eTag / cTag match issue");
+										log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' - gracefully handling error. Will upload as new file.");
 										itemdb.deleteById(item.driveId, item.id);
 										return;
 									}
@@ -1311,10 +1403,14 @@ final class SyncEngine
 				string parentPath = dirName(path);		// will be either . or something else
 								
 				try {
+					log.vdebug("Attempting to query OneDrive for this path: ", parentPath);
 					onedrivePathDetails = onedrive.getPathDetails(parentPath);
 				} catch (OneDriveException e) {
+					// exception - set onedriveParentRootDetails to a blank valid JSON
+					onedrivePathDetails = parseJSON("{}");
 					if (e.httpStatusCode == 404) {
 						// Parent does not exist ... need to create parent
+						log.vdebug("Parent path does not exist: ", parentPath);
 						uploadCreateDir(parentPath);
 					}
 					
@@ -1324,14 +1420,25 @@ final class SyncEngine
 					}
 				}
 								
-				// configure the data
-				parent.driveId = onedrivePathDetails["parentReference"]["driveId"].str; // Should give something like 12345abcde1234a1
-				parent.id = onedrivePathDetails["id"].str; // This item's ID. Should give something like 12345ABCDE1234A1!101
+				// configure the parent item data
+				if (hasId(onedrivePathDetails) && hasParentReference(onedrivePathDetails)){
+					log.vdebug("Parent path found, configuring parent item");
+					parent.id = onedrivePathDetails["id"].str; // This item's ID. Should give something like 12345ABCDE1234A1!101
+					parent.driveId = onedrivePathDetails["parentReference"]["driveId"].str; // Should give something like 12345abcde1234a1
+				} else {
+					// OneDrive API query failed
+					log.error("\nERROR: Unable to query the following path due to OneDrive API regression: ", path);
+					log.error("ERROR: Refer to https://github.com/OneDrive/onedrive-api-docs/issues/976 for further details");
+					log.error("WORKAROUND: Manually create the path above on OneDrive to workaround API issue\n");
+					// return
+					return;
+				}
 			}
 		
 			JSONValue response;
 			// test if the path we are going to create already exists on OneDrive
 			try {
+				log.vdebug("Attempting to query OneDrive for this path: ", path);
 				response = onedrive.getPathDetails(path);
 			} catch (OneDriveException e) {
 				if (e.httpStatusCode == 404) {
@@ -1661,12 +1768,17 @@ final class SyncEngine
 			if (e.httpStatusCode == 412) {
 				// OneDrive threw a 412 error, most likely: ETag does not match current item's value
 				// Retry without eTag
-				log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' - gracefully handling error");
+				log.vdebug("File Metadata Update Failed - OneDrive eTag / cTag match issue");
+				log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' when attempting file time stamp update - gracefully handling error");
 				string nullTag = null;
 				response = onedrive.updateById(driveId, id, data, nullTag);
 			}
 		} 
-		saveItem(response);
+		// Check if the response JSON has an 'id', otherwise makeItem() fails with 'Key not found: id'
+		if (hasId(response)) {
+			// save the updated response from OneDrive in the database
+			saveItem(response);
+		}
 	}
 
 	private void saveItem(JSONValue jsonItem)
