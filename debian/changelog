@@ -1,9 +1,10 @@
-onedrive (2.2.5-1~1) unstable; urgency=medium
+onedrive (2.2.5-1) unstable; urgency=medium
 
   * new upstream releases
   * enable notifications during build
+  * update Vcs fields and maintainer email
 
- -- Norbert Preining <preining@debian.org>  Thu, 17 Jan 2019 11:17:25 +0900
+ -- Norbert Preining <preining@debian.org>  Thu, 17 Jan 2019 11:20:42 +0900
 
 onedrive (2.2.1-1) unstable; urgency=medium
 
