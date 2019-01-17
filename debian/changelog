@@ -4,7 +4,7 @@ onedrive (2.2.5-1) unstable; urgency=medium
   * enable notifications during build
   * update Vcs fields and maintainer email
 
- -- Norbert Preining <preining@debian.org>  Thu, 17 Jan 2019 11:20:42 +0900
+ -- Norbert Preining <norbert@preining.info>  Thu, 17 Jan 2019 11:22:12 +0900
 
 onedrive (2.2.1-1) unstable; urgency=medium
 
