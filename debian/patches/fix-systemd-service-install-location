@@ -5,7 +5,7 @@ fix PREFIX, and pre-generate version file
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -83,10 +83,10 @@ else
+@@ -95,10 +95,10 @@ else
  	chown root.root $(DESTDIR)/usr/lib/systemd/user/
  	chmod 0755 $(DESTDIR)/usr/lib/systemd/user/
  	install -D -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user/
@@ -17,6 +17,6 @@ fix PREFIX, and pre-generate version file
 +	chown root.root $(DESTDIR)/lib/systemd/system/
 +	chmod 0755 $(DESTDIR)/lib/systemd/system/
 +	install -D -m 644 onedrive@.service $(DESTDIR)/lib/systemd/system/
- endif
  	install -D -m 644 onedrive.service $(DESTDIR)/usr/lib/systemd/user/onedrive.service
+ endif
  
