@@ -4,6 +4,6 @@
 	dh $@
 
 override_dh_auto_build:
-	make DC=ldmd2 NOTIFICATIONS=1
+	make DC=ldc2 NOTIFICATIONS=1 PKGCONFIG=1
 	chrpath --delete onedrive
 
