@@ -17,8 +17,10 @@ A complete tool to interact with OneDrive on Linux. Built following the UNIX phi
 ## Build Requirements
 *   Build environment must have at least 1GB of memory & 1GB swap space
 *   [libcurl](http://curl.haxx.se/libcurl/)
-*   [SQLite 3](https://www.sqlite.org/)
+*   [SQLite 3](https://www.sqlite.org/) >= 3.7.15
 *   [Digital Mars D Compiler (DMD)](http://dlang.org/download.html)
+
+**Note:** DMD version >= 2.081.1 or LDC version >= 1.11.0 is required to compile this application
 
 ### Dependencies: Ubuntu/Debian - x86_64
 ```text
@@ -46,7 +48,7 @@ sudo apt install libnotify-dev
 ```
 
 ### Dependencies: Debian - i386 / i686
-**Note:** Validated with `Linux debian-i386 4.9.0-7-686-pae #1 SMP Debian 4.9.110-1 (2018-07-05) i686 GNU/Linux` and LDC - the LLVM D compiler (1.8.0).
+**Note:** Validated with `Linux debian-i386 4.9.0-8-686-pae #1 SMP Debian 4.9.130-2 (2018-10-27) i686 GNU/Linux` and LDC - the LLVM D compiler (1.12.0).
 
 First install development dependencies as per below:
 ```text
@@ -58,11 +60,13 @@ sudo apt install git
 Second, install the LDC compiler as per below:
 ```text
 mkdir ldc && cd ldc
-wget http://ftp.us.debian.org/debian/pool/main/l/ldc/ldc_1.8.0-3_i386.deb
-wget http://ftp.us.debian.org/debian/pool/main/l/ldc/libphobos2-ldc-shared-dev_1.8.0-3_i386.deb
-wget http://ftp.us.debian.org/debian/pool/main/l/ldc/libphobos2-ldc-shared78_1.8.0-3_i386.deb
-wget http://ftp.us.debian.org/debian/pool/main/l/llvm-toolchain-5.0/libllvm5.0_5.0.1-2~bpo9+1_i386.deb
-wget http://ftp.us.debian.org/debian/pool/main/n/ncurses/libtinfo6_6.1+20180714-1_i386.deb
+wget http://httpredir.debian.org/debian/pool/main/g/gcc-8/gcc-8-base_8.2.0-19_i386.deb
+wget http://httpredir.debian.org/debian/pool/main/g/gcc-8/libgcc1_8.2.0-19_i386.deb
+wget http://httpredir.debian.org/debian/pool/main/l/ldc/libphobos2-ldc-shared82_1.12.0-1_i386.deb
+wget http://httpredir.debian.org/debian/pool/main/l/ldc/libphobos2-ldc-shared-dev_1.12.0-1_i386.deb
+wget http://httpredir.debian.org/debian/pool/main/l/ldc/ldc_1.12.0-1_i386.deb
+wget http://httpredir.debian.org/debian/pool/main/l/llvm-toolchain-6.0/libllvm6.0_6.0.1-10_i386.deb
+wget http://httpredir.debian.org/debian/pool/main/n/ncurses/libtinfo6_6.1+20181013-1_i386.deb
 sudo dpkg -i ./*.deb
 ```
 For notifications the following is necessary:
@@ -80,6 +84,17 @@ curl -fsS https://dlang.org/install.sh | bash -s dmd
 For notifications the following is necessary:
 ```text
 sudo yum install libnotify-devel
+```
+
+### Dependencies: CentOS 6.x / RHEL 6.x
+In addition to the above requirements, the `sqlite` version used on CentOS 6.x / RHEL 6.x needs to be upgraded. Use the following instructions to update your version of `sqlite` so that it can support the client:
+```text
+sudo yum -y update
+sudo yum -y install epel-release, wget
+sudo yum -y install mock
+wget https://kojipkgs.fedoraproject.org//packages/sqlite/3.7.15.2/2.fc19/src/sqlite-3.7.15.2-2.fc19.src.rpm
+sudo mock --rebuild sqlite-3.7.15.2-2.fc19.src.rpm
+sudo yum -y upgrade /var/lib/mock/epel-6-{arch}/result/sqlite-*
 ```
 
 ### Dependencies: Fedora > Version 18
@@ -183,7 +198,7 @@ libraries are `gmodule-2.0`, `glib-2.0`, and `notify`.
 ```text
 git clone https://github.com/abraunegg/onedrive.git
 cd onedrive
-make DC=/usr/bin/ldmd2
+make DC=/usr/bin/ldc2
 sudo make install
 ```
 
@@ -219,13 +234,68 @@ docker run $firstRun --restart unless-stopped --name onedrive -v onedrive_conf:/
 ### Upgrading from 'skilion' client
 The 'skilion' version contains a significant number of defect's in how the local sync state is managed. When upgrading from the 'skilion' version to this version, it is advisable to stop any service / onedrive process from running and then remove any `items.sqlite3` file from your configuration directory (`~/.config/onedrive/`) as this will force the creation of a new local cache file.
 
-### Important - curl compatability
+Additionally, if you are using a 'config' file within your configuration directory (`~/.config/onedrive/`), please ensure that you update the `skip_file = ` option as per below:
+
+**Invalid configuration:**
+```text
+skip_file = "= .*|~*"
+```
+**Minimum valid configuration:**
+```text
+skip_file = "~*"
+```
+Do not use a skip_file entry of `.*` as this will prevent correct searching of local changes to process.
+
+### Important - curl compatibility
 If your system utilises curl >= 7.62.0 you may need to use `--force-http-1.1` in order for the client to work correctly due to changes in curl to prefer HTTP/2 over HTTP/1.1 by default.
 
 ### First run :zap:
 After installing the application you must run it at least once from the terminal to authorize it.
 
 You will be asked to open a specific link using your web browser where you will have to login into your Microsoft Account and give the application the permission to access your files. After giving the permission, you will be redirected to a blank page. Copy the URI of the blank page into the application.
+```text
+[user@hostname ~]$ onedrive 
+
+Authorize this app visiting:
+
+https://.....
+
+Enter the response uri: 
+
+```
+
+### Testing your configuration
+You are able to test your configuration by utilising the `--dry-run` CLI option. No files will be downloaded, uploaded or removed, however the application will display what 'would' have occurred. For example:
+```text
+onedrive --synchronize --verbose --dry-run
+DRY-RUN Configured. Output below shows what 'would' have occurred.
+Loading config ...
+Using Config Dir: /home/user/.config/onedrive
+Initializing the OneDrive API ...
+Opening the item database ...
+All operations will be performed in: /home/user/OneDrive
+Initializing the Synchronization Engine ...
+Account Type: personal
+Default Drive ID: <redacted>
+Default Root ID: <redacted>
+Remaining Free Space: 5368709120
+Fetching details for OneDrive Root
+OneDrive Root exists in the database
+Syncing changes from OneDrive ...
+Applying changes of Path ID: <redacted>
+Uploading differences of .
+Processing root
+The directory has not changed
+Uploading new items of .
+OneDrive Client requested to create remote path: ./newdir
+The requested directory to create was not found on OneDrive - creating remote directory: ./newdir
+Successfully created the remote directory ./newdir on OneDrive
+Uploading new file ./newdir/newfile.txt ... done.
+Remaining free space: 5368709076
+Applying changes of Path ID: <redacted>
+```
+
+**Note:** `--dry-run` can only be used with `--synchronize`. It cannot be used with `--monitor` and will be ignored.
 
 ### Show your configuration
 To validate your configuration the application will use, utilise the following:
@@ -238,8 +308,10 @@ Config path                         = /home/alex/.config/onedrive
 Config file found in config path    = false
 Config option 'sync_dir'            = /home/alex/OneDrive
 Config option 'skip_file'           = ~*
+Config option 'skip_dotfiles'       = false
 Config option 'skip_symlinks'       = false
 Config option 'monitor_interval'    = 45
+Config option 'min_notif_changes'   = 5
 Config option 'log_dir'             = /var/log/onedrive/
 Selective sync configured           = false
 ```
@@ -354,6 +426,18 @@ If you want to just delete the application key, but keep the items database:
 rm -f ~/.config/onedrive/refresh_token
 ```
 
+### Handling a OneDrive account password change
+If you change your OneDrive account password, the client will no longer be authorised to sync, and will generate the following error:
+```text
+ERROR: OneDrive returned a 'HTTP 401 Unauthorized' - Cannot Initialize Sync Engine
+```
+To re-authorise the client, follow the steps below:
+1.   If running the client as a service (init.d or systemd), stop the service
+2.   Run the command `onedrive --logout`. This will clean up the previous authorisation, and will prompt you to re-authorise as per initial configuration.
+3.   Restart the client if running as a service or perform a manual sync
+
+The application will now sync with OneDrive with the new credentials.
+
 ## Additional Configuration
 Additional configuration is optional.
 If you want to change the defaults, you can copy and edit the included config file into your `~/.config/onedrive` directory:
@@ -367,8 +451,10 @@ This file does not get created by default, and should only be created if you wan
 Available options:
 *   `sync_dir`: directory where the files will be synced
 *   `skip_file`: any files or directories that match this pattern will be skipped during sync
+*   `skip_dotfiles`: skip any .files or .folders during sync
 *   `skip_symlinks`: any files or directories that are symlinked will be skipped during sync
 *   `monitor_interval`: time interval in seconds by which the monitor process will process local and remote changes
+*   `min_notif_changes`: minimum number of pending incoming changes to trigger a desktop notification
 
 ### sync_dir
 Example: `sync_dir="~/MyDirToSync"`
@@ -379,11 +465,18 @@ Proceed with caution here when changing the default sync dir from ~/OneDrive to 
 The issue here is around how the client stores the sync_dir path in the database. If the config file is missing, or you don't use the `--syncdir` parameter - what will happen is the client will default back to `~/OneDrive` and 'think' that either all your data has been deleted - thus delete the content on OneDrive, or will start downloading all data from OneDrive into the default location.
 
 ### skip_file
-Example: `skip_file = ".*|~*|Desktop|Documents/OneNote*|Documents/IISExpress|Documents/SQL Server Management Studio|Documents/Visual Studio*|Documents/config.xlaunch|Documents/WindowsPowerShell"`
+Example: `skip_file = "~*|Desktop|Documents/OneNote*|Documents/IISExpress|Documents/SQL Server Management Studio|Documents/Visual Studio*|Documents/config.xlaunch|Documents/WindowsPowerShell"`
 
 Patterns are case insensitive. `*` and `?` [wildcards characters](https://technet.microsoft.com/en-us/library/bb490639.aspx) are supported. Use `|` to separate multiple patterns.
 
 **Note:** after changing `skip_file`, you must perform a full re-synchronization by adding `--resync` to your existing command line - for example: `onedrive --synchronize --resync`
+
+**Note:** Do not use a skip_file entry of `.*` as this will prevent correct searching of local changes to process.
+
+### skip_dotfiles
+Example: `skip_dotfiles = "true"`
+
+Setting this to `"true"` will skip all .files and .folders while syncing.
 
 ### skip_symlinks
 Example: `skip_symlinks = "true"`
@@ -394,6 +487,11 @@ Setting this to `"true"` will skip all symlinks while syncing.
 Example: `monitor_interval = "300"`
 
 The monitor interval is defined as the wait time 'between' sync's when running in monitor mode. By default without configuration, the monitor_interval is set to 45 seconds. Setting this value to 300 will run the sync process every 5 minutes.
+
+### min_notif_changes
+Example: `min_notif_changes = "5"`
+
+This option defines the minimum number of pending incoming changes necessary to trigger a desktop notification. This allows controlling the frequency of notifications.
 
 ### Selective sync
 Selective sync allows you to sync only specific files and directories.
@@ -412,6 +510,17 @@ Textbooks
 Year 2
 ```
 **Note:** after changing the sync_list, you must perform a full re-synchronization by adding `--resync` to your existing command line - for example: `onedrive --synchronize --resync`
+
+### Skipping directories from syncing
+There are several mechanisms available to 'skip' a directory from scanning:
+*   Utilise 'skip_file'
+*   Utilise 'sync_list'
+
+One further method is to add a '.nosync' empty file to any folder. When this file is present, adding `--check-for-nosync` to your command line will now make the sync process skip any folder where the '.nosync' file is present.
+
+To make this a permanent change to always skip folders when a '.nosync' empty file is present, add the following to your config file:
+
+Example: `check_nosync = "true"`
 
 ### Shared folders
 Folders shared with you can be synced by adding them to your OneDrive. To do that open your Onedrive, go to the Shared files list, right click on the folder you want to sync and then click on "Add to my OneDrive".
@@ -510,6 +619,30 @@ systemctl --user start onedrive-work
 ```
 Repeat these steps for each OneDrive account that you wish to use.
 
+### Access OneDrive service through a proxy
+If you have a requirement to run the client through a proxy, there are a couple of ways to achieve this:
+1.  Set proxy configuration in `~/.bashrc` to allow the authorization process and when utilizing `--synchronize`
+2.  If running as a systemd service, edit the applicable systemd service file to include the proxy configuration information:
+```text
+[Unit]
+Description=OneDrive Free Client
+Documentation=https://github.com/abraunegg/onedrive
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment="HTTP_PROXY=http://ip.address:port"
+Environment="HTTPS_PROXY=http://ip.address:port"
+ExecStart=/usr/local/bin/onedrive --monitor
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+```
+
+**Note:** After modifying the service files, you will need to run `sudo systemctl daemon-reload` to ensure the service file changes are picked up. A restart of the OneDrive service will also be required to pick up the change to send the traffic via the proxy server
+
 ## Extra
 
 ### Reporting issues
@@ -543,6 +676,8 @@ Options:
 
   --check-for-nomount
       Check for the presence of .nosync in the syncdir root. If found, do not perform sync.
+  --check-for-nosync
+      Check for the presence of .nosync in each directory. If found, skip directory from sync.
   --confdir ARG
       Set the directory used to store the configuration files
   --create-directory ARG
@@ -561,6 +696,8 @@ Options:
       Only download remote changes
   --disable-upload-validation
       Disable upload validation when uploading to OneDrive
+  --dry-run
+      Perform a trial sync with no changes made	  
   --enable-logging
       Enable client activity to a separate log file
   --force-http-1.1
@@ -583,6 +720,8 @@ Options:
       Remove a directory on OneDrive - no sync will be performed.
   --single-directory ARG
       Specify a single local directory within the OneDrive root to sync.
+  --skip-dot-files
+      Skip dot files and folders from syncing
   --skip-symlinks
       Skip syncing of symlinks
   --source-directory ARG
