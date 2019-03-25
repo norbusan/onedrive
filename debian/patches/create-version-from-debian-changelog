@@ -1,15 +1,21 @@
 ---
- Makefile |    5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ Makefile |   10 ++--------
+ 1 file changed, 2 insertions(+), 8 deletions(-)
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -126,5 +126,6 @@ endif
+@@ -135,12 +135,6 @@ endif
  	for i in $(DOCFILES) ; do rm -f $(DESTDIR)$(DOCDIR)/$$i ; done
  	rm -f $(DESTDIR)$(MANDIR)/onedrive.1
  
--version: .git/HEAD .git/index
+-version:
+-ifeq ($(gitversion),1)
 -	echo $(shell git describe --tags) > version
+-else
+-	echo $(RELEASEVER) > version
+-endif
+-
+-.PHONY: version
 +version: debian/changelog
 +	echo v$(shell dpkg-parsechangelog  -S version) > version
-+
+ 

@@ -4,7 +4,7 @@
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -28,7 +28,7 @@ endif
+@@ -37,7 +37,7 @@ endif
  
  DFLAGS += -w -g -ofonedrive -O $(NOTIF_VERSIONS) $(LIBS) -J.
  
