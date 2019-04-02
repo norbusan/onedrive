@@ -1,3 +1,10 @@
+onedrive (2.3.2-1) unstable; urgency=medium
+
+  * new upstream releases
+  * update patches
+
+ -- Norbert Preining <norbert@preining.info>  Tue, 02 Apr 2019 09:27:03 +0900
+
 onedrive (2.3.0-1) unstable; urgency=medium
 
   * new upstream release

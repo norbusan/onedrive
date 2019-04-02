@@ -1,10 +1,10 @@
 ---
- Makefile |   10 ++--------
- 1 file changed, 2 insertions(+), 8 deletions(-)
+ Makefile |   10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
 
 --- onedrive.git.orig/Makefile
 +++ onedrive.git/Makefile
-@@ -135,12 +135,6 @@ endif
+@@ -135,9 +135,7 @@ endif
  	for i in $(DOCFILES) ; do rm -f $(DESTDIR)$(DOCDIR)/$$i ; done
  	rm -f $(DESTDIR)$(MANDIR)/onedrive.1
  
@@ -14,8 +14,8 @@
 -else
 -	echo $(RELEASEVER) > version
 -endif
--
--.PHONY: version
+\ No newline at end of file
++
++
 +version: debian/changelog
 +	echo v$(shell dpkg-parsechangelog  -S version) > version
- 
