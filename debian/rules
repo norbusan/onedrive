@@ -4,6 +4,6 @@
 	dh $@
 
 override_dh_auto_build:
-	make DC=ldc2 NOTIFICATIONS=1 PKGCONFIG=1
+	make DC=ldc2 NOTIFICATIONS=1 PKGCONFIG=1 COMPLETIONS=1 ZSHCOMPLETIONDIR=/usr/share/zsh/vendor-completions
 	chrpath --delete onedrive
 
