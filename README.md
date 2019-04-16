@@ -198,6 +198,11 @@ libraries are `gmodule-2.0`, `glib-2.0`, and `notify`.
 By passing `DEBUG=1` to the `make` call, `onedrive` gets built with additional debug
 information, useful (for example) to get `perf`-issued figures.
 
+By passing `COMPLETIONS=1` to the `make` call, shell completion functions are
+installed for `bash` and `zsh`. The installation directories are determined
+as far as possible automatically, but can be overridden by setting the
+environment variables `BASHCOMPLETIONDIR` and `ZSHCOMPLETIONDIR`.
+
 ### Building using a different compiler (for example [LDC](https://wiki.dlang.org/LDC))
 #### Debian - i386 / i686
 ```text
@@ -322,7 +327,7 @@ Config option 'skip_file'           = ~*|.~*|*.tmp
 Config option 'skip_dotfiles'       = false
 Config option 'skip_symlinks'       = false
 Config option 'monitor_interval'    = 45
-Config option 'min_notif_changes'   = 5
+Config option 'min_notify_changes'   = 5
 Config option 'log_dir'             = /var/log/onedrive/
 Selective sync configured           = false
 ```
@@ -449,8 +454,12 @@ To re-authorise the client, follow the steps below:
 
 The application will now sync with OneDrive with the new credentials.
 
-## Additional Configuration
-Additional configuration is optional.
+## Configuration
+
+Configuration is determined by three layer: the default values, values set in the configuration file, and values passed in via the command line. The default values provide a reasonable default, and configuration is optionally.
+
+Most command line options have a respective configuration file setting.
+
 If you want to change the defaults, you can copy and edit the included config file into your `~/.config/onedrive` directory:
 ```text
 mkdir -p ~/.config/onedrive
@@ -459,13 +468,9 @@ nano ~/.config/onedrive/config
 ```
 This file does not get created by default, and should only be created if you want to change the 'default' operational parameters.
 
-Available options:
-*   `sync_dir`: directory where the files will be synced
-*   `skip_file`: any files or directories that match this pattern will be skipped during sync
-*   `skip_dotfiles`: skip any .files or .folders during sync
-*   `skip_symlinks`: any files or directories that are symlinked will be skipped during sync
-*   `monitor_interval`: time interval in seconds by which the monitor process will process local and remote changes
-*   `min_notif_changes`: minimum number of pending incoming changes to trigger a desktop notification
+See the [config](config) file for the full list of options, and below under "All available commands" for all possible keys and there default values.
+
+Comments regarding some of the options:
 
 ### sync_dir
 Example: `sync_dir="~/MyDirToSync"`
@@ -516,8 +521,8 @@ Example: `monitor_interval = "300"`
 
 The monitor interval is defined as the wait time 'between' sync's when running in monitor mode. By default without configuration, the monitor_interval is set to 45 seconds. Setting this value to 300 will run the sync process every 5 minutes.
 
-### min_notif_changes
-Example: `min_notif_changes = "5"`
+### min_notify_changes
+Example: `min_notify_changes = "5"`
 
 This option defines the minimum number of pending incoming changes necessary to trigger a desktop notification. This allows controlling the frequency of notifications.
 
@@ -710,46 +715,60 @@ Options:
       Set the directory used to store the configuration files
   --create-directory ARG
       Create a directory on OneDrive - no sync will be performed.
-  --destination-directory ARG
-      Destination directory for renamed or move on OneDrive - no sync will be performed.
   --debug-https
       Debug OneDrive HTTPS communication.
+  --destination-directory ARG
+      Destination directory for renamed or move on OneDrive - no sync will be performed.
   --disable-notifications
       Do not use desktop notifications in monitor mode.
+  --disable-upload-validation
+      Disable upload validation when uploading to OneDrive
   --display-config
       Display what options the client will use as currently configured - no sync will be performed.
   --display-sync-status
       Display the sync status of the client - no sync will be performed.
-  -d --download-only
+  --download-only -d
       Only download remote changes
-  --disable-upload-validation
-      Disable upload validation when uploading to OneDrive
   --dry-run
-      Perform a trial sync with no changes made	  
+      Perform a trial sync with no changes made
   --enable-logging
       Enable client activity to a separate log file
   --force-http-1.1
       Force the use of HTTP 1.1 for all operations
   --get-O365-drive-id ARG
       Query and return the Office 365 Drive ID for a given Office 365 SharePoint Shared Library
+  --help -h
+      This help information.
   --local-first
       Synchronize from the local directory source first, before downloading changes from OneDrive.
+  --log-dir ARG
+      Directory where logging output is saved to, needs to end with a slash.
   --logout
       Logout the current user
-  -m --monitor
+  --min-notif-changes ARG
+      Minimum number of pending incoming changes necessary to trigger a desktop notification
+  --monitor -m
       Keep monitoring for local and remote changes
+  --monitor-fullscan-frequency ARG
+      Number of sync runs before performing a full local scan of the synced directory
+  --monitor-interval ARG
+      Number of seconds by which each sync operation is undertaken when idle under monitor mode.
+  --monitor-log-frequency ARG
+      Frequency of logging in monitor mode
   --no-remote-delete
       Do not delete local file 'deletes' from OneDrive when using --upload-only
   --print-token
       Print the access token, useful for debugging
-  --resync
-      Forget the last saved state, perform a full sync
   --remove-directory ARG
       Remove a directory on OneDrive - no sync will be performed.
+  --resync
+      Forget the last saved state, perform a full sync
   --single-directory ARG
       Specify a single local directory within the OneDrive root to sync.
   --skip-dot-files
       Skip dot files and folders from syncing
+  --skip-file ARG
+      Skip any files that match this pattern from syncing
   --skip-symlinks
       Skip syncing of symlinks
   --source-directory ARG
@@ -760,12 +779,10 @@ Options:
       Perform a synchronization
   --upload-only
       Only upload to OneDrive, do not sync changes from OneDrive locally
-  -v+ --verbose
+  --verbose -v+
       Print more details, useful for debugging (repeat for extra debugging)
   --version
       Print the version and exit
-  -h --help
-      This help information.
 ```
 
 ### File naming
