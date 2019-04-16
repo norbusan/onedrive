@@ -1,9 +1,15 @@
 #!/usr/bin/make -f
 
+export DC=ldc2
+export NOTIFICATIONS=1
+export PKGCONFIG=1
+export COMPLETIONS=1
+export ZSHCOMPLETIONDIR=/usr/share/zsh/vendor-completions
+
 %:
 	dh $@
 
 override_dh_auto_build:
-	make DC=ldc2 NOTIFICATIONS=1 PKGCONFIG=1 COMPLETIONS=1 ZSHCOMPLETIONDIR=/usr/share/zsh/vendor-completions
+	make
 	chrpath --delete onedrive
 
