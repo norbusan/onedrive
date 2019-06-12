@@ -1,13 +1,13 @@
 #!/usr/bin/make -f
 
 export DC=ldc2
-export NOTIFICATIONS=1
-export PKGCONFIG=1
-export COMPLETIONS=1
-export ZSHCOMPLETIONDIR=/usr/share/zsh/vendor-completions
 
 %:
 	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- --enable-completions --enable-notifications \
+		--with-zsh-completion-dir=/usr/share/zsh/vendor-completions
 
 override_dh_auto_build:
 	make
