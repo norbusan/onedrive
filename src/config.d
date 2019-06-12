@@ -46,8 +46,10 @@ final class Config
 		boolValues["debug_https"]        = false;
 		boolValues["skip_dotfiles"]      = false;
 		boolValues["dry_run"]            = false;
+		boolValues["sync_root_files"]	 = false;
 		longValues["verbose"]            = log.verbose; // might be initialized by the first getopt call!
 		longValues["monitor_interval"]   = 45,
+		longValues["skip_size"]          = 0,
 		longValues["min_notify_changes"]  = 5;
 		longValues["monitor_log_frequency"] = 5;
 		// Number of n sync runs before performing a full local scan of sync_dir
@@ -149,6 +151,7 @@ final class Config
 		stringValues["remove_directory"]  = "";
 		stringValues["single_directory"]  = "";
 		stringValues["source_directory"]  = "";
+		stringValues["auth_files"]        = "";
 		boolValues["display_config"]      = false;
 		boolValues["display_sync_status"] = false;
 		boolValues["resync"]              = false;
@@ -167,6 +170,9 @@ final class Config
 				args,
 				std.getopt.config.bundling,
 				std.getopt.config.caseSensitive,
+				"auth-files",
+					"Perform authentication not via interactive dialog but via files read/writes to these files.",
+					&stringValues["auth_files"],
 				"check-for-nomount",
 					"Check for the presence of .nosync in the syncdir root. If found, do not perform sync.", 
 					&boolValues["check_nomount"],
@@ -218,7 +224,7 @@ final class Config
 				"logout",
 					"Logout the current user",
 					&boolValues["logout"],
-				"min-notif-changes",
+				"min-notify-changes",
 					"Minimum number of pending incoming changes necessary to trigger a desktop notification",
 					&longValues["min_notify_changes"],
 				"monitor|m",
@@ -254,6 +260,9 @@ final class Config
 				"skip-file",
 					"Skip any files that match this pattern from syncing",
 					&stringValues["skip_file"],
+				"skip-size",
+					"Skip new files larger than this size (in MB)",
+					&longValues["skip_size"],
 				"skip-symlinks",
 					"Skip syncing of symlinks",
 					&boolValues["skip_symlinks"],
@@ -266,6 +275,9 @@ final class Config
 				"synchronize",
 					"Perform a synchronization",
 					&boolValues["synchronize"],
+				"sync-root-files",
+					"Sync all files in sync_dir root when using sync_list.",
+					&boolValues["sync_root_files"],
 				"upload-only",
 					"Only upload to OneDrive, do not sync changes from OneDrive locally",
 					&boolValues["upload_only"],
@@ -394,7 +406,7 @@ void outputLongHelp(Option[] opt)
 		"--destination-directory",
 		"--get-O365-drive-id",
 		"--log-dir",
-		"--min-notif-changes",
+		"--min-notify-changes",
 		"--monitor-interval",
 		"--monitor-log-frequency",
 		"--monitor-fullscan-frequency",

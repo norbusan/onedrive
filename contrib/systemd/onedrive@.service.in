@@ -1,13 +1,15 @@
 [Unit]
-Description=OneDrive Free Client
+Description=OneDrive Free Client for %i
 Documentation=https://github.com/abraunegg/onedrive
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=@PREFIX@/bin/onedrive --monitor
+ExecStart=@prefix@/bin/onedrive --monitor --confdir=/home/%i/.config/onedrive
+User=%i
+Group=users
 Restart=on-failure
 RestartSec=3
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
