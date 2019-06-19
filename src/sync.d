@@ -963,9 +963,11 @@ final class SyncEngine
 			log.vdebug("OneDrive change is a new local item");
 			// Check if file should be skipped based on size limit
 			if (isItemFile(driveItem)) {
-				if (onedrive.getFileDetails(item.driveId, item.id)["size"].integer >= this.newSizeLimit) {
-					log.vlog("Skipping item - excluded by skip_size config: ", item.name, " (", onedrive.getFileDetails(item.driveId, item.id)["size"].integer/2^^20, " MB)");
-					return;
+				if (cfg.getValueLong("skip_size") != 0) {
+					if (driveItem["size"].integer >= this.newSizeLimit) {
+						log.vlog("Skipping item - excluded by skip_size config: ", item.name, " (", driveItem["size"].integer/2^^20, " MB)");
+						return;
+					}
 				}
 			}
 			applyNewItem(item, path);
@@ -1097,7 +1099,16 @@ final class SyncEngine
 	{
 		assert(item.type == ItemType.file);
 		write("Downloading file ", path, " ... ");
-		JSONValue fileDetails = onedrive.getFileDetails(item.driveId, item.id);
+		JSONValue fileDetails;
+		
+		try {
+			fileDetails = onedrive.getFileDetails(item.driveId, item.id);
+		} catch (OneDriveException e) {
+			if (e.httpStatusCode >= 500) {
+				// OneDrive returned a 'HTTP 5xx Server Side Error' - gracefully handling error - error message already logged
+				return;
+			}
+		}
 		
 		if (isMalware(fileDetails)){
 			// OneDrive reports that this file is malware
@@ -1107,9 +1118,18 @@ final class SyncEngine
 			return;
 		}
 		
-		auto fileSize = fileDetails["size"].integer;
-		
 		if (!dryRun) {
+			ulong fileSize = 0;
+			if (hasFileSize(fileDetails)) {
+				// Set the file size from the returned data
+				fileSize = fileDetails["size"].integer;
+			} else {
+				// Issue #540 handling
+				log.vdebug("ERROR: onedrive.getFileDetails call returned a OneDriveException error");
+				// We want to return, cant download
+				return;
+			}
+		
 			try {
 				onedrive.downloadById(item.driveId, item.id, path, fileSize);
 			} catch (OneDriveException e) {
@@ -1748,9 +1768,16 @@ final class SyncEngine
 					log.vlog("Directory disappeared during upload: ", path);
 					return;
 				}
-				auto entries = dirEntries(path, SpanMode.shallow, false);
-				foreach (DirEntry entry; entries) {
-					uploadNewItems(entry.name);
+				
+				// Try and access the directory and any path below
+				try {
+					auto entries = dirEntries(path, SpanMode.shallow, false);
+					foreach (DirEntry entry; entries) {
+						uploadNewItems(entry.name);
+					}
+				} catch (std.file.FileException e) {
+					log.error("ERROR: ", e.msg);
+					return;
 				}
 			} else {
 				// This item is a file

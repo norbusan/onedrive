@@ -134,11 +134,18 @@ onedrive --synchronize --verbose
 ### Client Activity Log
 When running onedrive all actions can be logged to a separate log file. This can be enabled by using the `--enable-logging` flag. By default, log files will be written to `/var/log/onedrive/`
 
-**Note:** You will need to ensure your user has the applicable permissions to write to this directory or the following warning will be printed:
+**Note:** You will need to ensure the existence of this directory, and that your user has the applicable permissions to write to this directory or the following warning will be printed:
 ```text
 Unable to access /var/log/onedrive/
 Please manually create '/var/log/onedrive/' and set appropriate permissions to allow write access
 The requested client activity log will instead be located in the users home directory
+```
+
+On many systems this can be achieved by
+```text
+mkdir /var/log/onedrive
+chown root.users /var/log/onedrive
+chmod 0775 /var/log/onedrive
 ```
 
 All logfiles will be in the format of `%username%.onedrive.log`, where `%username%` represents the user who ran the client.
@@ -304,8 +311,14 @@ To make this a permanent change to always skip folders when a '.nosync' empty fi
 
 Example: `check_nosync = "true"`
 
-### Shared folders
+### Shared folders (OneDrive Personal)
 Folders shared with you can be synced by adding them to your OneDrive. To do that open your Onedrive, go to the Shared files list, right click on the folder you want to sync and then click on "Add to my OneDrive".
+
+### Shared folders (OneDrive Business or Office 365)
+Currently not supported.
+
+### SharePoint / Office 365 Shared Libraries
+Refer to [./Office365.md](Office365.md)
 
 ### OneDrive service running as root user
 There are two ways that onedrive can be used as a service
