@@ -79,6 +79,11 @@ private bool hasId(const ref JSONValue item)
 	return ("id" in item) != null;
 }
 
+private bool hasQuickXorHash(const ref JSONValue item)
+{
+	return ("quickXorHash" in item["file"]["hashes"]) != null;
+}
+
 private bool isDotFile(string path)
 {
 	// always allow the root
@@ -301,8 +306,8 @@ final class SyncEngine
 				exit(-1);
 			}
 		}
-		
-		if ((hasId(oneDriveDetails)) && (hasId(oneDriveRootDetails))) {
+
+		if ((oneDriveDetails.type() == JSONType.object) && (oneDriveRootDetails.type() == JSONType.object) && (hasId(oneDriveDetails)) && (hasId(oneDriveRootDetails))) {
 			// JSON elements are valid
 			// Debug OneDrive Account details response
 			log.vdebug("OneDrive Account Details:      ", oneDriveDetails);
@@ -1107,29 +1112,44 @@ final class SyncEngine
 			if (e.httpStatusCode >= 500) {
 				// OneDrive returned a 'HTTP 5xx Server Side Error' - gracefully handling error - error message already logged
 				return;
+			} else {
+				// Default operation if not a 500 error
+				log.error("ERROR: Query of OneDrive for file details failed");
+				return;
 			}
 		}
 		
-		if (isMalware(fileDetails)){
-			// OneDrive reports that this file is malware
-			log.error("ERROR: MALWARE DETECTED IN FILE - DOWNLOAD SKIPPED");
-			// set global flag
-			malwareDetected = true;
+		// fileDetails has to be a valid JSON object
+		if (fileDetails.type() == JSONType.object){
+			if (isMalware(fileDetails)){
+				// OneDrive reports that this file is malware
+				log.error("ERROR: MALWARE DETECTED IN FILE - DOWNLOAD SKIPPED");
+				// set global flag
+				malwareDetected = true;
+				return;
+			}
+		} else {
+			// Issue #550 handling
+			log.vdebug("ERROR: onedrive.getFileDetails call returned a OneDriveException error");
+			// We want to return, cant download
 			return;
 		}
 		
 		if (!dryRun) {
 			ulong fileSize = 0;
-			if (hasFileSize(fileDetails)) {
+			string OneDriveFileHash;
+			if ( (hasFileSize(fileDetails)) && (hasQuickXorHash(fileDetails)) && (fileDetails.type() == JSONType.object) ) {
+				// fileDetails is a valid JSON object with the elements we need
 				// Set the file size from the returned data
 				fileSize = fileDetails["size"].integer;
+				OneDriveFileHash = fileDetails["file"]["hashes"]["quickXorHash"].str;
 			} else {
 				// Issue #540 handling
 				log.vdebug("ERROR: onedrive.getFileDetails call returned a OneDriveException error");
 				// We want to return, cant download
 				return;
 			}
-		
+			
 			try {
 				onedrive.downloadById(item.driveId, item.id, path, fileSize);
 			} catch (OneDriveException e) {
@@ -1162,7 +1182,28 @@ final class SyncEngine
 			}
 			// file has to have downloaded in order to set the times / data for the file
 			if (exists(path)) {
-				setTimes(path, item.mtime, item.mtime);
+				// A 'file' was downloaded - does what we downloaded = reported fileSize or if there is some sort of funky local disk compression going on
+				// does the file hash OneDrive reports match what we have locally?
+				string quickXorHash = computeQuickXorHash(path);
+				if ((getSize(path) == fileSize) || (OneDriveFileHash == quickXorHash)) {
+					// downloaded matches either size or hash
+					setTimes(path, item.mtime, item.mtime);
+				} else {
+					// size error?
+					if (getSize(path) != fileSize) {
+						// downloaded file size does not match
+						log.error("ERROR: File download size mis-match. Increase logging verbosity to determine why.");
+					}
+					// hash error?
+					if (OneDriveFileHash != quickXorHash) {
+						// downloaded file hash does not match
+						log.error("ERROR: File download hash mis-match. Increase logging verbosity to determine why.");
+					}	
+					// we do not want this local file to remain on the local file system
+					safeRemove(path);	
+					downloadFailed = true;
+					return;
+				}
 			} else {
 				log.error("ERROR: File failed to download. Increase logging verbosity to determine why.");
 				downloadFailed = true;
@@ -1982,12 +2023,10 @@ final class SyncEngine
 									// https://github.com/OneDrive/onedrive-api-docs/issues/53
 									try {
 										response = onedrive.simpleUpload(path, parent.driveId, parent.id, baseName(path));
-										writeln(" done.");
 									} catch (OneDriveException e) {
 										// error uploading file
 										return;
 									}
-									
 								} else {
 									// File is not a zero byte file
 									// Are we using OneDrive Personal or OneDrive Business?
@@ -2011,13 +2050,11 @@ final class SyncEngine
 												}
 												else throw e;
 											}
-											writeln(" done.");
 										} else {
 											// File larger than threshold - use a session to upload
 											writeln("");
 											try {
 												response = session.upload(path, parent.driveId, parent.id, baseName(path));
-												writeln(" done.");
 											} catch (OneDriveException e) {
 												// error uploading file
 												log.vlog("Upload failed with OneDriveException: ", e.msg);
@@ -2032,76 +2069,87 @@ final class SyncEngine
 										writeln("");
 										try {
 											response = session.upload(path, parent.driveId, parent.id, baseName(path));
-											writeln(" done.");
 										} catch (OneDriveException e) {
 											// error uploading file
+											log.vlog("Upload failed with OneDriveException: ", e.msg);
+											return;
+										} catch (FileException e) {
+											log.vlog("Upload failed with File Exception: ", e.msg);
 											return;
 										}
 									}
 								}
 								
-								// Log action to log file
-								log.fileOnly("Uploading new file ", path, " ... done.");
-								
-								// The file was uploaded, or a 4xx / 5xx error was generated
-								if ("size" in response){
-									// The response JSON contains size, high likelihood valid response returned 
-									ulong uploadFileSize = response["size"].integer;
-									
-									// In some cases the file that was uploaded was not complete, but 'completed' without errors on OneDrive
-									// This has been seen with PNG / JPG files mainly, which then contributes to generating a 412 error when we attempt to update the metadata
-									// Validate here that the file uploaded, at least in size, matches in the response to what the size is on disk
-									if (thisFileSize != uploadFileSize){
-										if(disableUploadValidation){
-											// Print a warning message
-											log.log("WARNING: Uploaded file size does not match local file - skipping upload validation");
+								// response from OneDrive has to be a valid JSON object
+								if (response.type() == JSONType.object){
+									// Log action to log file
+									log.fileOnly("Uploading new file ", path, " ... done.");
+									writeln(" done.");
+									// The file was uploaded, or a 4xx / 5xx error was generated
+									if ("size" in response){
+										// The response JSON contains size, high likelihood valid response returned 
+										ulong uploadFileSize = response["size"].integer;
+										
+										// In some cases the file that was uploaded was not complete, but 'completed' without errors on OneDrive
+										// This has been seen with PNG / JPG files mainly, which then contributes to generating a 412 error when we attempt to update the metadata
+										// Validate here that the file uploaded, at least in size, matches in the response to what the size is on disk
+										if (thisFileSize != uploadFileSize){
+											if(disableUploadValidation){
+												// Print a warning message
+												log.log("WARNING: Uploaded file size does not match local file - skipping upload validation");
+											} else {
+												// OK .. the uploaded file does not match and we did not disable this validation
+												log.log("Uploaded file size does not match local file - upload failure - retrying");
+												// Delete uploaded bad file
+												onedrive.deleteById(response["parentReference"]["driveId"].str, response["id"].str, response["eTag"].str);
+												// Re-upload
+												uploadNewFile(path);
+												return;
+											}
+										} 
+										
+										// File validation is OK
+										if ((accountType == "personal") || (thisFileSize == 0)){
+											// Update the item's metadata on OneDrive
+											string id = response["id"].str;
+											string cTag; 
+											
+											// Is there a valid cTag in the response?
+											if ("cTag" in response) {
+												// use the cTag instead of the eTag because OneDrive may update the metadata of files AFTER they have been uploaded
+												cTag = response["cTag"].str;
+											} else {
+												// Is there an eTag in the response?
+												if ("eTag" in response) {
+													// use the eTag from the response as there was no cTag
+													cTag = response["eTag"].str;
+												} else {
+													// no tag available - set to nothing
+													cTag = "";
+												}
+											}
+											
+											if (exists(path)) {
+												SysTime mtime = timeLastModified(path).toUTC();
+												uploadLastModifiedTime(parent.driveId, id, cTag, mtime);
+											} else {
+												// will be removed in different event!
+												log.log("File disappeared after upload: ", path);
+											}
+											return;
 										} else {
-											// OK .. the uploaded file does not match and we did not disable this validation
-											log.log("Uploaded file size does not match local file - upload failure - retrying");
-											// Delete uploaded bad file
-											onedrive.deleteById(response["parentReference"]["driveId"].str, response["id"].str, response["eTag"].str);
-											// Re-upload
-											uploadNewFile(path);
+											// OneDrive Business Account - always use a session to upload
+											// The session includes a Request Body element containing lastModifiedDateTime
+											// which negates the need for a modify event against OneDrive
+											saveItem(response);
 											return;
 										}
-									} 
-									
-									// File validation is OK
-									if ((accountType == "personal") || (thisFileSize == 0)){
-										// Update the item's metadata on OneDrive
-										string id = response["id"].str;
-										string cTag; 
-										
-										// Is there a valid cTag in the response?
-										if ("cTag" in response) {
-											// use the cTag instead of the eTag because OneDrive may update the metadata of files AFTER they have been uploaded
-											cTag = response["cTag"].str;
-										} else {
-											// Is there an eTag in the response?
-											if ("eTag" in response) {
-												// use the eTag from the response as there was no cTag
-												cTag = response["eTag"].str;
-											} else {
-												// no tag available - set to nothing
-												cTag = "";
-											}
-										}
-										
-										if (exists(path)) {
-											SysTime mtime = timeLastModified(path).toUTC();
-											uploadLastModifiedTime(parent.driveId, id, cTag, mtime);
-										} else {
-											// will be removed in different event!
-											log.log("File disappeared after upload: ", path);
-										}
-										return;
-									} else {
-										// OneDrive Business Account - always use a session to upload
-										// The session includes a Request Body element containing lastModifiedDateTime
-										// which negates the need for a modify event against OneDrive
-										saveItem(response);
-										return;
 									}
+								} else {
+									// response is not valid JSON, an error was returned from OneDrive
+									log.fileOnly("Uploading new file ", path, " ... error");
+									writeln(" error");
+									return;
 								}
 							} else {
 								// we are --dry-run - simulate the file upload
@@ -2127,7 +2175,7 @@ final class SyncEngine
 					// Note that NTFS supports POSIX semantics for case sensitivity but this is not the default behavior.
 					
 					// fileDetailsFromOneDrive has to be a valid object
-					if (fileDetailsFromOneDrive.object()){
+					if (fileDetailsFromOneDrive.type() == JSONType.object){
 						// Check that 'name' is in the JSON response (validates data) and that 'name' == the path we are looking for
 						if (("name" in fileDetailsFromOneDrive) && (fileDetailsFromOneDrive["name"].str == baseName(path))) {
 							// OneDrive 'name' matches local path name
@@ -2336,7 +2384,7 @@ final class SyncEngine
 	private void saveItem(JSONValue jsonItem)
 	{
 		// jsonItem has to be a valid object
-		if (jsonItem.object()){
+		if (jsonItem.type() == JSONType.object){
 			// Check if the response JSON has an 'id', otherwise makeItem() fails with 'Key not found: id'
 			if (hasId(jsonItem)) {
 				// Takes a JSON input and formats to an item which can be used by the database

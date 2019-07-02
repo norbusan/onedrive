@@ -3,7 +3,7 @@
 ## Using the client
 
 ### Upgrading from 'skilion' client
-The 'skilion' version contains a significant number of defect's in how the local sync state is managed. When upgrading from the 'skilion' version to this version, it is advisable to stop any service / onedrive process from running and then remove any `items.sqlite3` file from your configuration directory (`~/.config/onedrive/`) as this will force the creation of a new local cache file.
+The 'skilion' version contains a significant number of defects in how the local sync state is managed. When upgrading from the 'skilion' version to this version, it is advisable to stop any service / onedrive process from running and then remove any `items.sqlite3` file from your configuration directory (`~/.config/onedrive/`) as this will force the creation of a new local cache file.
 
 Additionally, if you are using a 'config' file within your configuration directory (`~/.config/onedrive/`), please ensure that you update the `skip_file = ` option as per below:
 
@@ -23,7 +23,7 @@ skip_file = "~*|.~*|*.tmp"
 Do not use a skip_file entry of `.*` as this will prevent correct searching of local changes to process.
 
 ### Important - curl compatibility
-If your system utilises curl >= 7.62.0 you may need to use `--force-http-1.1` in order for the client to work correctly due to changes in curl to prefer HTTP/2 over HTTP/1.1 by default.
+If your system utilises curl >= 7.62.0 curl defaults to prefer HTTP/2 over HTTP/1.1 by default. If you wish to use HTTP/2 for some operations you will need to use the `--force-http-2` config option to enable otherwise all operations will use HTTP/1.1.
 
 ### First run :zap:
 After installing the application you must run it at least once from the terminal to authorize it.
@@ -74,7 +74,7 @@ Applying changes of Path ID: <redacted>
 **Note:** `--dry-run` can only be used with `--synchronize`. It cannot be used with `--monitor` and will be ignored.
 
 ### Show your configuration
-To validate your configuration the application will use, utilise the following:
+To validate your configuration the application will use, utilize the following:
 ```text
 onedrive --display-config
 ```
@@ -148,7 +148,7 @@ chown root.users /var/log/onedrive
 chmod 0775 /var/log/onedrive
 ```
 
-All logfiles will be in the format of `%username%.onedrive.log`, where `%username%` represents the user who ran the client.
+All log files will be in the format of `%username%.onedrive.log`, where `%username%` represents the user who ran the client.
 
 **Note:**
 To use a different log directory rather than the default above, add the following as a configuration option to `~/.config/onedrive/config`:
@@ -492,7 +492,9 @@ Options:
   --enable-logging
       Enable client activity to a separate log file
   --force-http-1.1
-      Force the use of HTTP 1.1 for all operations
+      Force the use of HTTP/1.1 for all operations (DEPRECIATED)
+  --force-http-2
+      Force the use of HTTP/2 for all operations where applicable
   --get-O365-drive-id ARG
       Query and return the Office 365 Drive ID for a given Office 365 SharePoint Shared Library
   --help -h
@@ -547,4 +549,4 @@ Options:
 
 ### File naming
 The files and directories in the synchronization directory must follow the [Windows naming conventions](https://msdn.microsoft.com/en-us/library/aa365247).
-The application will attempt to handle instances where you have two files with the same name but different case. Where there is a namespace clash, the file name which clashes will not be synced. This is expected behavior and won't be fixed.
+The application will attempt to handle instances where you have two files with the same names but with different capitalization. Where there is a namespace clash, the file name which clashes will not be synced. This is expected behavior and won't be fixed.
