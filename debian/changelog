@@ -1,3 +1,9 @@
+onedrive (2.3.7-2) unstable; urgency=medium
+
+  * Source only upload
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 17 Jul 2019 11:48:37 +0900
+
 onedrive (2.3.7-1) unstable; urgency=medium
 
   * new upstream release - fixes a critical bug in 2.3.6
