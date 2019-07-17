@@ -1,3 +1,10 @@
+onedrive (2.3.7-3) unstable; urgency=medium
+
+  * Try to work around disappearing systemd pkg-config on sbuild hosts
+    (why on earth?) (Closes: #932317)
+
+ -- Norbert Preining <norbert@preining.info>  Thu, 18 Jul 2019 01:08:00 +0900
+
 onedrive (2.3.7-2) unstable; urgency=medium
 
   * Source only upload
