@@ -1,0 +1,6 @@
+# Defaults for the onedrive initscript
+
+# Set to the user onedrive should run as
+# If this is set to "nobody" (the default), then no synchronization will
+# be started.
+RUN_AS_USER=nobody
