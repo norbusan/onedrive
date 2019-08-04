@@ -40,6 +40,26 @@ Enter the response uri:
 
 ```
 
+### Show your configuration
+To validate your configuration the application will use, utilize the following:
+```text
+onedrive --display-config
+```
+This will display all the pertinent runtime interpretation of the options and configuration you are using. This is helpful to validate the client will perform the operations your asking without performing a sync. Example output is as follows:
+```text
+Config path                         = /home/alex/.config/onedrive
+Config file found in config path    = false
+Config option 'sync_dir'            = /home/alex/OneDrive
+Config option 'skip_dir'            = 
+Config option 'skip_file'           = ~*|.~*|*.tmp
+Config option 'skip_dotfiles'       = false
+Config option 'skip_symlinks'       = false
+Config option 'monitor_interval'    = 45
+Config option 'min_notify_changes'   = 5
+Config option 'log_dir'             = /var/log/onedrive/
+Selective sync configured           = false
+```
+
 ### Testing your configuration
 You are able to test your configuration by utilising the `--dry-run` CLI option. No files will be downloaded, uploaded or removed, however the application will display what 'would' have occurred. For example:
 ```text
@@ -72,26 +92,6 @@ Applying changes of Path ID: <redacted>
 ```
 
 **Note:** `--dry-run` can only be used with `--synchronize`. It cannot be used with `--monitor` and will be ignored.
-
-### Show your configuration
-To validate your configuration the application will use, utilize the following:
-```text
-onedrive --display-config
-```
-This will display all the pertinent runtime interpretation of the options and configuration you are using. This is helpful to validate the client will perform the operations your asking without performing a sync. Example output is as follows:
-```text
-Config path                         = /home/alex/.config/onedrive
-Config file found in config path    = false
-Config option 'sync_dir'            = /home/alex/OneDrive
-Config option 'skip_dir'            = 
-Config option 'skip_file'           = ~*|.~*|*.tmp
-Config option 'skip_dotfiles'       = false
-Config option 'skip_symlinks'       = false
-Config option 'monitor_interval'    = 45
-Config option 'min_notify_changes'   = 5
-Config option 'log_dir'             = /var/log/onedrive/
-Selective sync configured           = false
-```
 
 ### Performing a sync
 By default all files are downloaded in `~/OneDrive`. After authorizing the application, a sync of your data can be performed by running:
@@ -241,7 +241,9 @@ Example: `skip_dir = "Desktop|Documents/IISExpress|Documents/SQL Server Manageme
 
 Patterns are case insensitive. `*` and `?` [wildcards characters](https://technet.microsoft.com/en-us/library/bb490639.aspx) are supported. Use `|` to separate multiple patterns.
 
-**Note:** after changing `skip_dir`, you must perform a full re-synchronization by adding `--resync` to your existing command line - for example: `onedrive --synchronize --resync`
+**Note:** After changing `skip_dir`, you must perform a full re-synchronization by adding `--resync` to your existing command line - for example: `onedrive --synchronize --resync`
+
+**Note:** Entries under `skip_dir` are relative to your `sync_dir` path.
 
 ### skip_file
 Example: `skip_file = "~*|Documents/OneNote*|Documents/config.xlaunch|myfile.ext"`
@@ -438,6 +440,17 @@ WantedBy=default.target
 
 **Note:** After modifying the service files, you will need to run `sudo systemctl daemon-reload` to ensure the service file changes are picked up. A restart of the OneDrive service will also be required to pick up the change to send the traffic via the proxy server
 
+### Setup selinux for a sync folder outside of the home folder
+If selinux is enforced and the sync folder is outside of the home folder, as long as there is no policy for cloud fileservice providers, label the file system folder to user_home_t.
+```text
+sudo semanage fcontext -a -t user_home_t /path/to/onedriveSyncFolder
+sudo restorecon -R -v /path/to/onedriveSyncFolder
+```
+To remove this change from selinux and restore the default behaivor:
+```text
+sudo semanage fcontext -d /path/to/onedriveSyncFolder
+sudo restorecon -R -v /path/to/onedriveSyncFolder
+```
 
 ## All available commands
 
@@ -485,7 +498,7 @@ Options:
       Display what options the client will use as currently configured - no sync will be performed.
   --display-sync-status
       Display the sync status of the client - no sync will be performed.
-  --download-only -d
+  --download-only
       Only download remote changes
   --dry-run
       Perform a trial sync with no changes made
@@ -497,6 +510,8 @@ Options:
       Force the use of HTTP/2 for all operations where applicable
   --get-O365-drive-id ARG
       Query and return the Office 365 Drive ID for a given Office 365 SharePoint Shared Library
+  --get-file-link ARG
+      Display the file link of a synced file
   --help -h
       This help information.
   --local-first

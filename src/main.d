@@ -10,6 +10,8 @@ static import log;
 OneDriveApi oneDrive;
 ItemDatabase itemDb;
 
+const int EXIT_UNAUTHORIZED = 3;
+
 enum MONITOR_LOG_SILENT = 2;
 enum MONITOR_LOG_QUIET  = 1;
 enum LOG_NORMAL = 0;
@@ -220,7 +222,7 @@ int main(string[] args)
 		log.error("Could not initialize the OneDrive API");
 		// workaround for segfault in std.net.curl.Curl.shutdown() on exit
 		oneDrive.http.shutdown();
-		return EXIT_FAILURE;
+		return EXIT_UNAUTHORIZED;
 	}
 	
 	// if --synchronize or --monitor not passed in, exit & display help
@@ -232,7 +234,7 @@ int main(string[] args)
 	
 	// create-directory, remove-directory, source-directory, destination-directory 
 	// are activities that dont perform a sync no error message for these items either
-	if (((cfg.getValueString("create_directory") != "") || (cfg.getValueString("remove_directory") != "")) || ((cfg.getValueString("source_directory") != "") && (cfg.getValueString("destination_directory") != "")) || (cfg.getValueString("get_o365_drive_id") != "") || cfg.getValueBool("display_sync_status")) {
+	if (((cfg.getValueString("create_directory") != "") || (cfg.getValueString("remove_directory") != "")) || ((cfg.getValueString("source_directory") != "") && (cfg.getValueString("destination_directory") != "")) || (cfg.getValueString("get_file_link") != "") || (cfg.getValueString("get_o365_drive_id") != "") || cfg.getValueBool("display_sync_status")) {
 		performSyncOK = true;
 	}
 	
@@ -266,7 +268,15 @@ int main(string[] args)
 	log.vlog("All operations will be performed in: ", syncDir);
 	if (!exists(syncDir)) {
 		log.vdebug("syncDir: Configured syncDir is missing. Creating: ", syncDir);
-		mkdirRecurse(syncDir);
+		try {
+			// Attempt to create the sync dir we have been configured with
+			mkdirRecurse(syncDir);
+		} catch (std.file.FileException e) {
+			// Creating the sync directory failed
+			log.error("ERROR: Unable to create local OneDrive syncDir - ", e.msg);
+			oneDrive.http.shutdown();
+			return EXIT_FAILURE;
+		}
 	}
 	chdir(syncDir);
 	
@@ -304,7 +314,10 @@ int main(string[] args)
 	selectiveSync.setFileMask(cfg.getValueString("skip_file"));
 		
 	// Initialize the sync engine
-	log.logAndNotify("Initializing the Synchronization Engine ...");
+	if (cfg.getValueString("get_file_link") == "") {
+		// Print out that we are initializing the engine only if we are not grabbing the file link
+		log.logAndNotify("Initializing the Synchronization Engine ...");
+	}
 	auto sync = new SyncEngine(cfg, oneDrive, itemDb, selectiveSync);
 	
 	try {
@@ -357,8 +370,13 @@ int main(string[] args)
 	}
 	
 	// Are we obtaining the Office 365 Drive ID for a given Office 365 SharePoint Shared Library?
-	if (cfg.getValueString("get_o365_drive_id") != ""){
+	if (cfg.getValueString("get_o365_drive_id") != "") {
 		sync.querySiteCollectionForDriveID(cfg.getValueString("get_o365_drive_id"));
+	}
+	
+	// Are we obtaining the URL path for a synced file?
+	if (cfg.getValueString("get_file_link") != "") {
+		sync.queryOneDriveForFileURL(cfg.getValueString("get_file_link"), syncDir);
 	}
 	
 	// Are we displaying the sync status of the client?

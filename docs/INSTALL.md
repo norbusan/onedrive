@@ -78,11 +78,11 @@ sudo yum install libnotify-devel
 In addition to the above requirements, the `sqlite` version used on CentOS 6.x / RHEL 6.x needs to be upgraded. Use the following instructions to update your version of `sqlite` so that it can support the client:
 ```text
 sudo yum -y update
-sudo yum -y install epel-release, wget
+sudo yum -y install epel-release wget
 sudo yum -y install mock
 wget https://kojipkgs.fedoraproject.org//packages/sqlite/3.7.15.2/2.fc19/src/sqlite-3.7.15.2-2.fc19.src.rpm
-sudo mock --rebuild sqlite-3.7.15.2-2.fc19.src.rpm
-sudo yum -y upgrade /var/lib/mock/epel-6-{arch}/result/sqlite-*
+mock --rebuild sqlite-3.7.15.2-2.fc19.src.rpm
+sudo yum -y upgrade /var/lib/mock/epel-6-`arch`/result/sqlite-*
 ```
 
 ### Dependencies: Fedora > Version 18
@@ -94,7 +94,7 @@ curl -fsS https://dlang.org/install.sh | bash -s dmd
 ```
 For notifications the following is necessary:
 ```text
-sudo yum install libnotify-devel
+sudo dnf install libnotify-devel
 ```
 
 ### Dependencies: Arch Linux
@@ -112,8 +112,8 @@ sudo apt-get install libcurl4-openssl-dev
 sudo apt-get install libsqlite3-dev
 sudo apt-get install libxml2
 sudo apt-get install pkg-config
-wget https://github.com/ldc-developers/ldc/releases/download/v1.13.0/ldc2-1.13.0-linux-armhf.tar.xz
-tar -xvf ldc2-1.13.0-linux-armhf.tar.xz
+wget https://github.com/ldc-developers/ldc/releases/download/v1.16.0/ldc2-1.16.0-linux-armhf.tar.xz
+tar -xvf ldc2-1.16.0-linux-armhf.tar.xz
 ```
 For notifications the following is necessary:
 ```text
@@ -126,8 +126,8 @@ sudo apt-get install libcurl4-openssl-dev
 sudo apt-get install libsqlite3-dev
 sudo apt-get install libxml2
 sudo apt-get install pkg-config
-wget https://github.com/ldc-developers/ldc/releases/download/v1.14.0/ldc2-1.14.0-linux-aarch64.tar.xz
-tar -xvf ldc2-1.14.0-linux-aarch64.tar.xz
+wget https://github.com/ldc-developers/ldc/releases/download/v1.16.0/ldc2-1.16.0-linux-aarch64.tar.xz
+tar -xvf ldc2-1.16.0-linux-aarch64.tar.xz
 ```
 For notifications the following is necessary:
 ```text

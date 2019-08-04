@@ -79,9 +79,19 @@ private bool hasId(const ref JSONValue item)
 	return ("id" in item) != null;
 }
 
+private bool hasHashes(const ref JSONValue item)
+{
+	return ("hashes" in item["file"]) != null;
+}
+
 private bool hasQuickXorHash(const ref JSONValue item)
 {
 	return ("quickXorHash" in item["file"]["hashes"]) != null;
+}
+
+private bool hasSha1Hash(const ref JSONValue item)
+{
+	return ("sha1Hash" in item["file"]["hashes"]) != null;
 }
 
 private bool isDotFile(string path)
@@ -328,6 +338,7 @@ final class SyncEngine
 			}
 			
 			// Display accountType, defaultDriveId, defaultRootId & remainingFreeSpace for verbose logging purposes
+			log.vlog("Application version: ", strip(import("version")));
 			log.vlog("Account Type: ", accountType);
 			log.vlog("Default Drive ID: ", defaultDriveId);
 			log.vlog("Default Root ID: ", defaultRootId);
@@ -396,10 +407,13 @@ final class SyncEngine
 		string rootId = defaultRootId;
 		applyDifferences(driveId, rootId);
 
-		// check all remote folders
+		// Check OneDrive Personal Shared Folders
 		// https://github.com/OneDrive/onedrive-api-docs/issues/764
 		Item[] items = itemdb.selectRemoteItems();
-		foreach (item; items) applyDifferences(item.remoteDriveId, item.remoteId);
+		foreach (item; items) {
+			log.vlog("Syncing OneDrive Shared Folder: ", item.name);
+			applyDifferences(item.remoteDriveId, item.remoteId);
+		}
 	}
 
 	// download all new changes from a specified folder on OneDrive
@@ -828,8 +842,26 @@ final class SyncEngine
 		}
 
 		bool unwanted;
-		unwanted |= skippedItems.find(item.parentId).length != 0;
-		if (unwanted) log.vdebug("Flagging as unwanted: find(item.parentId).length != 0");
+		// Check if the parent id is something we need to skip
+		if (skippedItems.find(item.parentId).length != 0) {
+			// Potentially need to flag as unwanted
+			log.vdebug("Flagging as unwanted: find(item.parentId).length != 0");
+			unwanted = true;
+			
+			// Is this item id in the database?
+			if (itemdb.idInLocalDatabase(item.driveId, item.id)){
+				// item exists in database, most likely moved out of scope for current client configuration
+				log.vdebug("This item was previously synced / seen by the client");
+				if (selectiveSync.isPathExcluded(driveItem["parentReference"]["name"].str)) {
+					// Previously synced item is now out of scope as it has been moved out of what is included in sync_list
+					log.vdebug("This previously synced item is now excluded from being synced due to sync_list exclusion");
+					// flag to delete local file as it now is no longer in sync with OneDrive
+					log.vdebug("Flagging to delete item locally");
+					idsToDelete ~= [item.driveId, item.id];
+				}
+			}
+		}
+		
 		// Check if this is a directory to skip
 		if (!unwanted) {
 			// Only check path if config is != ""
@@ -1109,13 +1141,9 @@ final class SyncEngine
 		try {
 			fileDetails = onedrive.getFileDetails(item.driveId, item.id);
 		} catch (OneDriveException e) {
+			log.error("ERROR: Query of OneDrive for file details failed");
 			if (e.httpStatusCode >= 500) {
 				// OneDrive returned a 'HTTP 5xx Server Side Error' - gracefully handling error - error message already logged
-				downloadFailed = true;
-				return;
-			} else {
-				// Default operation if not a 500 error
-				log.error("ERROR: Query of OneDrive for file details failed");
 				downloadFailed = true;
 				return;
 			}
@@ -1132,7 +1160,7 @@ final class SyncEngine
 			}
 		} else {
 			// Issue #550 handling
-			log.vdebug("ERROR: onedrive.getFileDetails call returned a OneDriveException error");
+			log.error("ERROR: onedrive.getFileDetails call returned an invalid JSON Object");
 			// We want to return, cant download
 			downloadFailed = true;
 			return;
@@ -1141,17 +1169,35 @@ final class SyncEngine
 		if (!dryRun) {
 			ulong fileSize = 0;
 			string OneDriveFileHash;
-			if ( (hasFileSize(fileDetails)) && (hasQuickXorHash(fileDetails)) && (fileDetails.type() == JSONType.object) ) {
-				// fileDetails is a valid JSON object with the elements we need
-				// Set the file size from the returned data
+			
+			// fileDetails should be a valid JSON due to prior check
+			if (hasFileSize(fileDetails)) {
+				// Use the configured filesize as reported by OneDrive
 				fileSize = fileDetails["size"].integer;
-				OneDriveFileHash = fileDetails["file"]["hashes"]["quickXorHash"].str;
 			} else {
-				// Issue #540 handling
-				log.vdebug("ERROR: onedrive.getFileDetails call returned a OneDriveException error");
-				// We want to return, cant download
-				downloadFailed = true;
-				return;
+				// filesize missing
+				log.vdebug("WARNING: fileDetails['size'] is missing");
+			}
+
+			if (hasHashes(fileDetails)) {
+				// File details returned hash details
+				// QuickXorHash
+				if (hasQuickXorHash(fileDetails)) {
+					// Use the configured quickXorHash as reported by OneDrive
+					if (fileDetails["file"]["hashes"]["quickXorHash"].str != "") {
+						OneDriveFileHash = fileDetails["file"]["hashes"]["quickXorHash"].str;
+					}
+				} 
+				// Check for Sha1Hash
+				if (hasSha1Hash(fileDetails)) {
+					// Use the configured sha1Hash as reported by OneDrive
+					if (fileDetails["file"]["hashes"]["sha1Hash"].str != "") {
+						OneDriveFileHash = fileDetails["file"]["hashes"]["sha1Hash"].str;
+					}
+				}
+			} else {
+				// file hash data missing
+				log.vdebug("WARNING: fileDetails['file']['hashes'] is missing - unable to compare file hash after download");
 			}
 			
 			try {
@@ -1189,8 +1235,11 @@ final class SyncEngine
 				// A 'file' was downloaded - does what we downloaded = reported fileSize or if there is some sort of funky local disk compression going on
 				// does the file hash OneDrive reports match what we have locally?
 				string quickXorHash = computeQuickXorHash(path);
-				if ((getSize(path) == fileSize) || (OneDriveFileHash == quickXorHash)) {
+				string sha1Hash = computeSha1Hash(path);
+				
+				if ((getSize(path) == fileSize) || (OneDriveFileHash == quickXorHash) || (OneDriveFileHash == sha1Hash)) {
 					// downloaded matches either size or hash
+					log.vdebug("Downloaded file matches reported size and or reported file hash");
 					setTimes(path, item.mtime, item.mtime);
 				} else {
 					// size error?
@@ -1199,7 +1248,7 @@ final class SyncEngine
 						log.error("ERROR: File download size mis-match. Increase logging verbosity to determine why.");
 					}
 					// hash error?
-					if (OneDriveFileHash != quickXorHash) {
+					if ((OneDriveFileHash != quickXorHash) || (OneDriveFileHash != sha1Hash))  {
 						// downloaded file hash does not match
 						log.error("ERROR: File download hash mis-match. Increase logging verbosity to determine why.");
 					}	
@@ -1592,15 +1641,41 @@ final class SyncEngine
 								}
 								// OneDrive documentLibrary
 								if (accountType == "documentLibrary"){
-									// Due to https://github.com/OneDrive/onedrive-api-docs/issues/935 Microsoft modifies all PDF, MS Office & HTML files with added XML content. It is a 'feature' of SharePoint.
-									// This means, as a session upload, on 'completion' the file is 'moved' and generates a 404 ......
-									// Delete record from the local database - file will be uploaded as a new file
-									writeln(" skipped.");
-									log.fileOnly("Uploading modified file ", path, " ... skipped.");
-									log.vlog("Skip Reason: Microsoft Sharepoint 'enrichment' after upload issue");
-									log.vlog("See: https://github.com/OneDrive/onedrive-api-docs/issues/935 for further details");
-									itemdb.deleteById(item.driveId, item.id);
-									return;
+									// Handle certain file types differently
+									if ((extension(path) == ".txt") || (extension(path) == ".csv")) {
+										// .txt and .csv are unaffected by https://github.com/OneDrive/onedrive-api-docs/issues/935 
+										// For logging consistency
+										writeln("");
+										try {
+											response = session.upload(path, item.driveId, item.parentId, baseName(path), item.eTag);
+										} catch (OneDriveException e) {
+											// Resolve https://github.com/abraunegg/onedrive/issues/36
+											if ((e.httpStatusCode == 409) || (e.httpStatusCode == 423)) {
+												// The file is currently checked out or locked for editing by another user
+												// We cant upload this file at this time
+												writeln(" skipped.");
+												log.fileOnly("Uploading modified file ", path, " ... skipped.");
+												writeln("", path, " is currently checked out or locked for editing by another user.");
+												log.fileOnly(path, " is currently checked out or locked for editing by another user.");
+												return;
+											}
+											// what is this error?????
+											else throw e;
+										}
+										// As the session.upload includes the last modified time, save the response
+										saveItem(response);
+										
+									} else {									
+										// Due to https://github.com/OneDrive/onedrive-api-docs/issues/935 Microsoft modifies all PDF, MS Office & HTML files with added XML content. It is a 'feature' of SharePoint.
+										// This means, as a session upload, on 'completion' the file is 'moved' and generates a 404 ......
+										writeln("skipped.");
+										log.fileOnly("Uploading modified file ", path, " ... skipped.");
+										log.vlog("Skip Reason: Microsoft Sharepoint 'enrichment' after upload issue");
+										log.vlog("See: https://github.com/OneDrive/onedrive-api-docs/issues/935 for further details");
+										// Delete record from the local database - file will be uploaded as a new file
+										itemdb.deleteById(item.driveId, item.id);
+										return;
+									}
 								}
 					
 								// log line completion							
@@ -1864,7 +1939,7 @@ final class SyncEngine
 				string parentPath = dirName(path);		// will be either . or something else
 								
 				try {
-					log.vdebug("Attempting to query OneDrive for this path: ", parentPath);
+					log.vdebug("Attempting to query OneDrive for this parent path: ", parentPath);
 					onedrivePathDetails = onedrive.getPathDetails(parentPath);
 				} catch (OneDriveException e) {
 					// exception - set onedriveParentRootDetails to a blank valid JSON
@@ -1944,30 +2019,39 @@ final class SyncEngine
 				}
 			} 
 			
-			// https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
-			// Do not assume case sensitivity. For example, consider the names OSCAR, Oscar, and oscar to be the same, 
-			// even though some file systems (such as a POSIX-compliant file system) may consider them as different. 
-			// Note that NTFS supports POSIX semantics for case sensitivity but this is not the default behavior.
-			
-			if (response["name"].str == baseName(path)){
-				// OneDrive 'name' matches local path name
-				log.vlog("The requested directory to create was found on OneDrive - skipping creating the directory: ", path );
-				// Check that this path is in the database
-				if (!itemdb.selectById(parent.driveId, parent.id, parent)){
-					// parent for 'path' is NOT in the database
-					log.vlog("The parent for this path is not in the local database - need to add parent to local database");
-					string parentPath = dirName(path);
-					uploadCreateDir(parentPath);
+			// response from OneDrive has to be a valid JSON object
+			if (response.type() == JSONType.object){
+				// https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
+				// Do not assume case sensitivity. For example, consider the names OSCAR, Oscar, and oscar to be the same, 
+				// even though some file systems (such as a POSIX-compliant file system) may consider them as different. 
+				// Note that NTFS supports POSIX semantics for case sensitivity but this is not the default behavior.
+				
+				if (response["name"].str == baseName(path)){
+					// OneDrive 'name' matches local path name
+					log.vlog("The requested directory to create was found on OneDrive - skipping creating the directory: ", path );
+					// Check that this path is in the database
+					if (!itemdb.selectById(parent.driveId, parent.id, parent)){
+						// parent for 'path' is NOT in the database
+						log.vlog("The parent for this path is not in the local database - need to add parent to local database");
+						string parentPath = dirName(path);
+						uploadCreateDir(parentPath);
+					} else {
+						// parent is in database
+						log.vlog("The parent for this path is in the local database - adding requested path (", path ,") to database");
+						auto res = onedrive.getPathDetails(path);
+						saveItem(res);
+					}
 				} else {
-					// parent is in database
-					log.vlog("The parent for this path is in the local database - adding requested path (", path ,") to database");
-					auto res = onedrive.getPathDetails(path);
-					saveItem(res);
+					// They are the "same" name wise but different in case sensitivity
+					log.error("ERROR: Current directory has a 'case-insensitive match' to an existing directory on OneDrive");
+					log.error("ERROR: To resolve, rename this local directory: ", absolutePath(path));
+					log.log("Skipping: ", absolutePath(path));
+					return;
 				}
 			} else {
-				// They are the "same" name wise but different in case sensitivity
-				log.error("ERROR: Current directory has a 'case-insensitive match' to an existing directory on OneDrive");
-				log.error("ERROR: To resolve, rename this local directory: ", absolutePath(path));
+				// response is not valid JSON, an error was returned from OneDrive
+				log.error("ERROR: There was an error performing this operation on OneDrive");
+				log.error("ERROR: Increase logging verbosity to assist determining why.");
 				log.log("Skipping: ", absolutePath(path));
 				return;
 			}
@@ -2239,10 +2323,22 @@ final class SyncEngine
 										
 										// OneDrive SharePoint account modified file upload handling
 										if (accountType == "documentLibrary"){
-											// If this is a Microsoft SharePoint site, we need to remove the existing file before upload
-											onedrive.deleteById(fileDetailsFromOneDrive["parentReference"]["driveId"].str, fileDetailsFromOneDrive["id"].str, fileDetailsFromOneDrive["eTag"].str);	
-											// simple upload
-											response = onedrive.simpleUpload(path, parent.driveId, parent.id, baseName(path));
+											// Depending on the file size, this will depend on how best to handle the modified local file
+											// as if too large, the following error will be generated by OneDrive:
+											//     HTTP request returned status code 413 (Request Entity Too Large)
+											// We also cant use a session to upload the file, we have to use simpleUploadReplace
+											
+											if (getSize(path) <= thresholdFileSize) {
+												// Upload file via simpleUploadReplace as below threshhold size
+												response = onedrive.simpleUploadReplace(path, fileDetailsFromOneDrive["parentReference"]["driveId"].str, fileDetailsFromOneDrive["id"].str, fileDetailsFromOneDrive["eTag"].str);
+											} else {
+												// Have to upload via a session, however we have to delete the file first otherwise this will generate a 404 error post session upload
+												// Remove the existing file
+												onedrive.deleteById(fileDetailsFromOneDrive["parentReference"]["driveId"].str, fileDetailsFromOneDrive["id"].str, fileDetailsFromOneDrive["eTag"].str);	
+												// Upload as a session, as a new file
+												writeln("");
+												response = session.upload(path, parent.driveId, parent.id, baseName(path));
+											}
 											writeln(" done.");
 											saveItem(response);
 											// Due to https://github.com/OneDrive/onedrive-api-docs/issues/935 Microsoft modifies all PDF, MS Office & HTML files with added XML content. It is a 'feature' of SharePoint.
@@ -2536,6 +2632,38 @@ final class SyncEngine
 		
 		if(!found) {
 			writeln("ERROR: This site could not be found. Please check it's name and your permissions to access the site.");
+		}
+	}
+	
+	// Query OneDrive for a URL path of a file
+	void queryOneDriveForFileURL(string localFilePath, string syncDir) {
+		// Query if file is valid locally
+		if (exists(localFilePath)) {
+			// File exists locally, does it exist in the database
+			// Path needs to be relative to sync_dir path
+			string relativePath = relativePath(localFilePath, syncDir);
+			Item item;
+			if (itemdb.selectByPath(relativePath, defaultDriveId, item)) {
+				// File is in the local database cache
+				JSONValue fileDetails;
+		
+				try {
+					fileDetails = onedrive.getFileDetails(item.driveId, item.id);
+				} catch (OneDriveException e) {
+					log.error("ERROR: Query of OneDrive for file details failed");
+				}
+
+				if ((fileDetails.type() == JSONType.object) && ("webUrl" in fileDetails)) {
+					// Valid JSON object
+					writeln(fileDetails["webUrl"].str);
+				}
+			} else {
+				// File has not been synced with OneDrive
+				log.error("File has not been synced with OneDrive: ", localFilePath);
+			}
+		} else {
+			// File does not exist locally
+			log.error("File not found on local system: ", localFilePath);
 		}
 	}
 	
