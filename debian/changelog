@@ -1,3 +1,10 @@
+onedrive (2.3.8-1) unstable; urgency=medium
+
+  * new upstream release
+  * update patch
+
+ -- Norbert Preining <norbert@preining.info>  Mon, 05 Aug 2019 07:01:21 +0900
+
 onedrive (2.3.7-3) unstable; urgency=medium
 
   * Try to work around disappearing systemd pkg-config on sbuild hosts
