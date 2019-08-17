@@ -1,10 +1,10 @@
-onedrive (2.3.8-1) UNRELEASED; urgency=medium
+onedrive (2.3.8-1) unstable; urgency=medium
 
   * new upstream release
   * update patch
-  * TODO init.d script support
+  * init.d script support
 
- -- Norbert Preining <norbert@preining.info>  Mon, 05 Aug 2019 07:30:39 +0900
+ -- Norbert Preining <norbert@preining.info>  Sun, 18 Aug 2019 08:26:45 +0900
 
 onedrive (2.3.7-3) unstable; urgency=medium
 
