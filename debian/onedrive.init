@@ -30,6 +30,11 @@ if [ -f /etc/default/onedrive ] ; then
     . /etc/default/onedrive
 fi
 
+if [ ! "$ENABLED" = "yes" ] ; then
+    log_warning_msg "Onedrive unit disabled in /etc/default/onedrive"
+    exit 0
+fi
+
 if [ "$RUN_AS_USER" = "nobody" ] ; then
     log_failure_msg "Not running onedrive for user nobody, please configure in /etc/default/onedrive"
     exit 1
