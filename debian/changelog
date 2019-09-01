@@ -1,3 +1,10 @@
+onedrive (2.3.9-1) unstable; urgency=medium
+
+  * new upstream release
+  * add -b debian to vcs-git
+
+ -- Norbert Preining <norbert@preining.info>  Sun, 01 Sep 2019 10:43:05 +0900
+
 onedrive (2.3.8-2) unstable; urgency=medium
 
   * disable init.d starting of onedrive
