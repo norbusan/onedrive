@@ -166,7 +166,7 @@ final class OneDriveApi
 	{
 		import std.stdio, std.regex;
 		char[] response;
-		string url = authUrl ~ "?client_id=" ~ clientId ~ "&scope=files.readwrite%20files.readwrite.all%20offline_access&response_type=code&redirect_uri=" ~ redirectUrl;
+		string url = authUrl ~ "?client_id=" ~ clientId ~ "&scope=Files.ReadWrite%20Files.ReadWrite.all%20Sites.ReadWrite.All%20offline_access&response_type=code&redirect_uri=" ~ redirectUrl;
 		string authFilesString = cfg.getValueString("auth_files");
 		if (authFilesString == "") {
 			log.log("Authorize this app visiting:\n");
@@ -364,7 +364,7 @@ final class OneDriveApi
 		http.contentLength = offsetSize;
 		auto response = perform();
 		// TODO: retry on 5xx errors
-		checkHttpCode();
+		checkHttpCode(response);
 		return response;
 	}
 
@@ -620,7 +620,6 @@ final class OneDriveApi
 		} catch (CurlException e) {
 			// Potentially Timeout was reached on handle error
 			log.error("\nThere was a problem in accessing the Microsoft OneDrive service - Internet connectivity issue?\n");
-			throw e;
 		}
 		
 		JSONValue json;
@@ -680,6 +679,7 @@ final class OneDriveApi
 	
 		switch(http.statusLine.code)
 		{
+			//  0 - OK ... HTTP2 version of 200 OK
 			case 0:
 				break;
 			//	200 - OK
@@ -702,9 +702,15 @@ final class OneDriveApi
 			case 400:
 				// Bad Request .. how should we act?
 				log.vlog("OneDrive returned a 'HTTP 400 - Bad Request' - gracefully handling error");
-				break;	
+				break;
 			
-			// Item not found
+			// 403 - Forbidden
+			case 403:
+				// OneDrive responded that the user is forbidden
+				log.vlog("OneDrive returned a 'HTTP 403 - Forbidden' - gracefully handling error");
+				break;
+			
+			// 404 - Item not found
 			case 404:
 				// Item was not found - do not throw an exception
 				log.vlog("OneDrive returned a 'HTTP 404 - Item not found' - gracefully handling error");
@@ -770,16 +776,41 @@ final class OneDriveApi
 	{
 		switch(http.statusLine.code)
 		{
+			//  0 - OK ... HTTP2 version of 200 OK
+			case 0:
+				break;
+			//	200 - OK
+			case 200:
+				// No Log .. 
+				break;
+			//	201 - Created OK
+			//  202 - Accepted
+			//	204 - Deleted OK
+			case 201,202,204:
+				// No actions, but log if verbose logging
+				//log.vlog("OneDrive Response: '", http.statusLine.code, " - ", http.statusLine.reason, "'");
+				break;
+				
+			// 302 - resource found and available at another location, redirect
+			case 302:
+				break;
+			
 			// 400 - Bad Request
 			case 400:
 				// Bad Request .. how should we act?
 				log.vlog("OneDrive returned a 'HTTP 400 - Bad Request' - gracefully handling error");
-				break;	
+				break;
+			
+			// 403 - Forbidden
+			case 403:
+				// OneDrive responded that the user is forbidden
+				log.vlog("OneDrive returned a 'HTTP 403 - Forbidden' - gracefully handling error");
+				// Throw this as a specific exception so this is caught when performing sync.o365SiteSearch
+				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 			
 			//	412 - Precondition Failed
 			case 412:
-				log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' - gracefully handling error");
-				// Throw this as a specific exception so this is caught when performing uploadLastModifiedTime
+				// Throw this as a specific exception so this is caught when performing sync.uploadLastModifiedTime
 				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 				
 			// Server side (OneDrive) Errors
@@ -788,24 +819,20 @@ final class OneDriveApi
 			//	503 - Service Unavailable
 			//  504 - Gateway Timeout (Issue #320)
 			case 500:
-				// No actions
-				log.vlog("OneDrive returned a 'HTTP 500 Internal Server Error' - gracefully handling error");
-				break;
+				// Throw this as a specific exception so this is caught
+				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 				
 			case 502:
-				// No actions
-				log.vlog("OneDrive returned a 'HTTP 502 Bad Gateway Error' - gracefully handling error");
-				break;
+				// Throw this as a specific exception so this is caught
+				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 			
 			case 503:
-				// No actions
-				log.vlog("OneDrive returned a 'HTTP 503 Service Unavailable Error' - gracefully handling error");
-				break;
+				// Throw this as a specific exception so this is caught
+				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 			
 			case 504:
-				// No actions
-				log.vlog("OneDrive returned a 'HTTP 504 Gateway Timeout Error' - gracefully handling error");
-				break;
+				// Throw this as a specific exception so this is caught
+				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 			
 			// Default - all other errors that are not a 2xx or a 302
 			default:
