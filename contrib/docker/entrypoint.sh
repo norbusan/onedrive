@@ -20,13 +20,31 @@ if ! oduser="$(getent passwd $ONEDRIVE_UID)"; then
 else
   oduser="${oduser%%:*}"
   usermod -g "${odgroup}" "${oduser}"
-  grep -qv root <( groups "${oduser}" ) || { echo 'ROOT level priviledges prohibited!'; exit 1; }
+  grep -qv root <( groups "${oduser}" ) || { echo 'ROOT level privileges prohibited!'; exit 1; }
 fi
 
 chown "${oduser}:${odgroup}" /onedrive/ /onedrive/conf
 
 # Default parameters
-ARGS=(--monitor --verbose --confdir /onedrive/conf --syncdir /onedrive/data)
+ARGS=(--monitor --confdir /onedrive/conf --syncdir /onedrive/data)
+
+# Make Verbose output optional, based on an environment variable
+if [ "${ONEDRIVE_VERBOSE:=0}" == "1" ]; then
+   echo "# We are being verbose"
+   ARGS=(--verbose ${ARGS[@]})
+fi
+
+# Tell client to perform debug output, based on an environment variable
+if [ "${ONEDRIVE_DEBUG:=0}" == "1" ]; then
+   echo "# We are performing debug output"
+   ARGS=(--verbose --verbose ${ARGS[@]})
+fi
+
+# Tell client to perform a resync based on environment variable
+if [ "${ONEDRIVE_RESYNC:=0}" == "1" ]; then
+   echo "# We are performing a --resync"
+   ARGS=(--resync ${ARGS[@]})
+fi
 
 if [ ${#} -gt 0 ]; then
   ARGS=("${@}")
