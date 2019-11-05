@@ -411,13 +411,13 @@ final class SyncEngine
 	}
 	
 	// download all new changes from OneDrive
-	void applyDifferences()
+	void applyDifferences(bool performFullItemScan)
 	{
 		// Set defaults for the root folder
 		// Use the global's as initialised via init() rather than performing unnecessary additional HTTPS calls
 		string driveId = defaultDriveId;
 		string rootId = defaultRootId;
-		applyDifferences(driveId, rootId);
+		applyDifferences(driveId, rootId, performFullItemScan);
 
 		// Check OneDrive Personal Shared Folders
 		// https://github.com/OneDrive/onedrive-api-docs/issues/764
@@ -425,7 +425,7 @@ final class SyncEngine
 		foreach (item; items) {
 			log.vdebug("------------------------------------------------------------------");
 			log.vlog("Syncing OneDrive Shared Folder: ", item.name);
-			applyDifferences(item.remoteDriveId, item.remoteId);
+			applyDifferences(item.remoteDriveId, item.remoteId, performFullItemScan);
 		}
 	}
 
@@ -462,23 +462,23 @@ final class SyncEngine
 				//		2. Download changes specific to the remote path
 				
 				// root remote
-				applyDifferences(defaultDriveId, onedrivePathDetails["id"].str);
+				applyDifferences(defaultDriveId, onedrivePathDetails["id"].str, false);
 			
 				// remote changes
 				driveId = onedrivePathDetails["remoteItem"]["parentReference"]["driveId"].str; // Should give something like 66d53be8a5056eca
 				folderId = onedrivePathDetails["remoteItem"]["id"].str; // Should give something like BC7D88EC1F539DCF!107
 				
 				// Apply any differences found on OneDrive for this path (download data)
-				applyDifferences(driveId, folderId);
+				applyDifferences(driveId, folderId, false);
 			} else {
 				// use the item id as folderId
 				folderId = onedrivePathDetails["id"].str; // Should give something like 12345ABCDE1234A1!101
 				// Apply any differences found on OneDrive for this path (download data)
-				applyDifferences(defaultDriveId, folderId);
+				applyDifferences(defaultDriveId, folderId, false);
 			}
 		} else {
 			// Log that an invalid JSON object was returned
-			log.error("ERROR: onedrive.getPathDetails call returned an invalid JSON Object");
+			log.vdebug("onedrive.getPathDetails call returned an invalid JSON Object");
 		}
 	}
 	
@@ -507,7 +507,8 @@ final class SyncEngine
 			}
 		} else {
 			// Log that an invalid JSON object was returned
-			log.error("ERROR: onedrive.getDefaultRoot call returned an invalid JSON Object");
+			log.error("ERROR: Unable to query OneDrive for account details");
+			log.vdebug("onedrive.getDefaultRoot call returned an invalid JSON Object");
 			// Must exit here as we cant configure our required variables
 			exit(-1);
 		}
@@ -586,18 +587,11 @@ final class SyncEngine
 	
 	// download the new changes of a specific item
 	// id is the root of the drive or a shared folder
-	private void applyDifferences(string driveId, const(char)[] id)
+	private void applyDifferences(string driveId, const(char)[] id, bool performFullItemScan)
 	{
 		log.vlog("Applying changes of Path ID: " ~ id);
 		JSONValue changes;
-		
-		// If we are using a sync_list file, using deltaLink will actually 'miss' changes (moves & deletes) on OneDrive as using sync_list discards changes
-		string deltaLink = "";
-		string userSyncList = cfg.configDirName ~ "/sync_list";
-		if (!exists(userSyncList)){
-			// not using sync_list file, use the delta link
-			deltaLink = itemdb.getDeltaLink(driveId, id);
-		}
+		JSONValue changesAvailable;
 		
 		// Query the name of this folder id
 		string syncFolderName;
@@ -736,7 +730,25 @@ final class SyncEngine
 			}
 		} else {
 			// Log that an invalid JSON object was returned
-			log.error("ERROR: onedrive.getPathDetailsById call returned an invalid JSON Object");
+			log.vdebug("onedrive.getPathDetailsById call returned an invalid JSON Object");
+		}
+		
+		// If we are using a sync_list file, using deltaLink will actually 'miss' changes (moves & deletes) on OneDrive as using sync_list discards changes
+		// Use the performFullItemScan boolean to control whether we perform a full object scan of use the delta link for the root folder
+		// When using --synchronize the process order is:
+		//   1. Scan OneDrive for changes
+		//   2. Scan local folder for changes
+		//   3. Scan OneDrive for changes
+		// When using sync_list and performing a full scan, what this means is a full scan is performed twice, which leads to massive processing & time overheads 
+		// Control this via performFullItemScan
+		
+		// Get the current delta link
+		string deltaLink = "";
+		string deltaLinkAvailable = itemdb.getDeltaLink(driveId, id);
+		if (!performFullItemScan){
+			// performFullItemScan == false
+			// use delta link
+			deltaLink = deltaLinkAvailable;
 		}
 		
 		for (;;) {
@@ -758,6 +770,7 @@ final class SyncEngine
 			try {
 				// Fetch the changes relative to the path id we want to query
 				changes = onedrive.viewChangesById(driveId, idToQuery, deltaLink);
+				changesAvailable = onedrive.viewChangesById(driveId, idToQuery, deltaLinkAvailable);
 			} catch (OneDriveException e) {
 				// OneDrive threw an error
 				log.vdebug("OneDrive threw an error when querying for these changes:");
@@ -792,7 +805,7 @@ final class SyncEngine
 					// HTTP request returned status code 504 (Gateway Timeout)
 					// Retry by calling applyDifferences() again
 					log.vlog("OneDrive returned a 'HTTP 504 - Gateway Timeout' - gracefully handling error");
-					applyDifferences(driveId, idToQuery);
+					applyDifferences(driveId, idToQuery, performFullItemScan);
 				} else {
 					// Default operation if not 404, 410, 500, 504 errors
 					// display what the error is
@@ -802,18 +815,39 @@ final class SyncEngine
 				}
 			}
 			
+			// is changesAvailable a valid JSON response
+			long deltaChanges = 0;
+			if (changesAvailable.type() == JSONType.object) {
+				// are there any delta changes?
+				if (("value" in changesAvailable) != null) {
+					deltaChanges = count(changesAvailable["value"].array);
+				}
+			}
+			
 			// is changes a valid JSON response
 			if (changes.type() == JSONType.object) {
 				// Are there any changes to process?
-				if (("value" in changes) != null) {
+				if ((("value" in changes) != null) && (deltaChanges > 0)) {
 					auto nrChanges = count(changes["value"].array);
 					auto changeCount = 0;
-
-					if (nrChanges >= cfg.getValueLong("min_notify_changes")) {
-						log.logAndNotify("Processing ", nrChanges, " changes");
+					
+					if (!performFullItemScan){
+						// Display the number of changes we are processing
+						if (nrChanges >= cfg.getValueLong("min_notify_changes")) {
+							log.logAndNotify("Processing ", nrChanges, " changes");
+						} else {
+							// There are valid changes
+							log.vdebug("Number of changes from OneDrive to process: ", nrChanges);
+						}
 					} else {
-						// There are valid changes
-						log.vdebug("Number of changes from OneDrive to process: ", nrChanges);
+						// Do not display anything unless we are doing a verbose debug as due to #658 we are essentially doing a --resync each time when using sync_list
+						// Display the number of items we are processing
+						if (nrChanges >= cfg.getValueLong("min_notify_changes")) {
+							log.logAndNotify("Processing ", nrChanges, " OneDrive items to ensure consistent state due to sync_list being used");
+						} else {
+							// There are valid changes
+							log.vdebug("Number of items from OneDrive to process: ", nrChanges);
+						}
 					}
 					
 					foreach (item; changes["value"].array) {
@@ -985,6 +1019,9 @@ final class SyncEngine
 							} 
 						}
 					}
+				} else {
+					// No changes reported on OneDrive
+					log.vdebug("OneDrive Reported no delta changes - Local path and OneDrive in-sync");
 				}
 				
 				// the response may contain either @odata.deltaLink or @odata.nextLink
@@ -995,9 +1032,9 @@ final class SyncEngine
 			} else {
 				// Log that an invalid JSON object was returned
 				if ((driveId == defaultDriveId) || (!syncBusinessFolders)) {
-					log.error("ERROR: onedrive.viewChangesByItemId call returned an invalid JSON Object");
+					log.vdebug("onedrive.viewChangesByItemId call returned an invalid JSON Object");
 				} else {
-					log.error("ERROR: onedrive.viewChangesByDriveId call returned an invalid JSON Object");
+					log.vdebug("onedrive.viewChangesByDriveId call returned an invalid JSON Object");
 				}
 			}	
 		}
@@ -1054,7 +1091,7 @@ final class SyncEngine
 				// item exists in database, most likely moved out of scope for current client configuration
 				log.vdebug("This item was previously synced / seen by the client");				
 				if (("name" in driveItem["parentReference"]) != null) {
-					if (selectiveSync.isPathExcluded(driveItem["parentReference"]["name"].str)) {
+					if (selectiveSync.isPathExcludedViaSyncList(driveItem["parentReference"]["name"].str)) {
 						// Previously synced item is now out of scope as it has been moved out of what is included in sync_list
 						log.vdebug("This previously synced item is now excluded from being synced due to sync_list exclusion");
 						// flag to delete local file as it now is no longer in sync with OneDrive
@@ -1065,18 +1102,70 @@ final class SyncEngine
 			}
 		}
 		
-		// Check if this is a directory to skip
+		// Check if this is excluded by config option: skip_dir
 		if (!unwanted) {
 			// Only check path if config is != ""
 			if (cfg.getValueString("skip_dir") != "") {
-				unwanted = selectiveSync.isDirNameExcluded(item.name);
-				if (unwanted) log.vlog("Skipping item - excluded by skip_dir config: ", item.name);
+				// Is the item a folder and not a deleted item?
+				if ((isItemFolder(driveItem)) && (!isItemDeleted(driveItem))) {
+					// work out the 'snippet' path where this folder would be created
+					string simplePathToCheck = "";
+					string complexPathToCheck = "";
+					string matchDisplay = "";
+					
+					if (hasParentReference(driveItem)) {
+						// we need to workout the FULL path for this item
+						string parentDriveId = driveItem["parentReference"]["driveId"].str;
+						string parentItem = driveItem["parentReference"]["id"].str;
+						// simple path
+						if (("name" in driveItem["parentReference"]) != null) {
+							simplePathToCheck = driveItem["parentReference"]["name"].str ~ "/" ~ driveItem["name"].str;
+						} else {
+							simplePathToCheck = driveItem["name"].str;
+						}
+						// complex path
+						complexPathToCheck = itemdb.computePath(parentDriveId, parentItem) ~ "/" ~ driveItem["name"].str;
+						complexPathToCheck = buildNormalizedPath(complexPathToCheck);
+						log.vdebug("skip_dir path to check (simple):  ", simplePathToCheck);
+						log.vdebug("skip_dir path to check (complex): ", complexPathToCheck);
+					} else {
+						simplePathToCheck = driveItem["name"].str;
+					}
+					
+					// OK .. what checks are we doing?
+					if ((simplePathToCheck != "") && (complexPathToCheck == "")) {
+						// just a simple check
+						log.vdebug("Performing a simple check only");
+						unwanted = selectiveSync.isDirNameExcluded(simplePathToCheck);
+					} else {
+						// simple and complex
+						log.vdebug("Performing a simple & complex path match if required");
+						// simple first
+						unwanted = selectiveSync.isDirNameExcluded(simplePathToCheck);
+						matchDisplay = simplePathToCheck;
+						if (!unwanted) {
+							log.vdebug("Simple match was false, attempting complex match");
+							// simple didnt match, perform a complex check
+							unwanted = selectiveSync.isDirNameExcluded(complexPathToCheck);
+							matchDisplay = complexPathToCheck;
+						}
+					}
+					
+					log.vdebug("Result: ", unwanted);
+					if (unwanted) log.vlog("Skipping item - excluded by skip_dir config match: ", matchDisplay);
+				}
 			}
 		}
-		// Check if this is a file to skip
+		
+		// Check if this is excluded by config option: skip_file
 		if (!unwanted) {
-			unwanted = selectiveSync.isFileNameExcluded(item.name);
-			if (unwanted) log.vlog("Skipping item - excluded by skip_file config: ", item.name);
+			// Is the item a file and not a deleted item?
+			if ((isItemFile(driveItem)) && (!isItemDeleted(driveItem))) {
+				log.vdebug("skip_file item to check: ", item.name);
+				unwanted = selectiveSync.isFileNameExcluded(item.name);
+				log.vdebug("Result: ", unwanted);
+				if (unwanted) log.vlog("Skipping item - excluded by skip_file config: ", item.name);
+			}
 		}
 
 		// check the item type
@@ -1103,7 +1192,7 @@ final class SyncEngine
 				// compute the item path to see if the path is excluded
 				path = itemdb.computePath(item.driveId, item.parentId) ~ "/" ~ item.name;
 				path = buildNormalizedPath(path);
-				if (selectiveSync.isPathExcluded(path)) {
+				if (selectiveSync.isPathExcludedViaSyncList(path)) {
 					// selective sync advised to skip, however is this a file and are we configured to upload / download files in the root?
 					if ((isItemFile(driveItem)) && (cfg.getValueBool("sync_root_files")) && (rootName(path) == "") ) {
 						// This is a file
@@ -1113,7 +1202,7 @@ final class SyncEngine
 					} else {
 						// path is unwanted
 						unwanted = true;
-						log.vdebug("OneDrive change path is to be excluded by user configuration: ", path);
+						log.vlog("Skipping item - excluded by sync_list config: ", path);
 					}
 				}
 			} else {
@@ -1381,7 +1470,8 @@ final class SyncEngine
 			}
 		} else {
 			// Issue #550 handling
-			log.error("ERROR: onedrive.getFileDetails call returned an invalid JSON Object");
+			log.error("ERROR: Query of OneDrive for file details failed");
+			log.vdebug("onedrive.getFileDetails call returned an invalid JSON Object");
 			// We want to return, cant download
 			downloadFailed = true;
 			return;
@@ -1424,9 +1514,11 @@ final class SyncEngine
 			try {
 				onedrive.downloadById(item.driveId, item.id, path, fileSize);
 			} catch (OneDriveException e) {
-				if (e.httpStatusCode == 429) {
+				if ((e.httpStatusCode == 429) || (e.httpStatusCode == 408)) {
 					// HTTP request returned status code 429 (Too Many Requests)
 					// https://github.com/abraunegg/onedrive/issues/133
+					// or 408 request timeout
+					// https://github.com/abraunegg/onedrive/issues/694
 					// Back off & retry with incremental delay
 					int retryCount = 10; 
 					int retryAttempts = 1;
@@ -1438,7 +1530,7 @@ final class SyncEngine
 							// successful download
 							retryAttempts = retryCount;
 						} catch (OneDriveException e) {
-							if (e.httpStatusCode == 429) {
+							if ((e.httpStatusCode == 429) || (e.httpStatusCode == 408)) {
 								// Increment & loop around
 								retryAttempts++;
 							}
@@ -1641,7 +1733,7 @@ final class SyncEngine
 		// If path or filename does not exclude, is this excluded due to use of selective sync?
 		if (!unwanted) {
 			path = itemdb.computePath(item.driveId, item.id);
-			unwanted = selectiveSync.isPathExcluded(path);
+			unwanted = selectiveSync.isPathExcludedViaSyncList(path);
 		}
 
 		// skip unwanted items
@@ -2179,12 +2271,20 @@ final class SyncEngine
 						return;
 					}
 				}
-				if (selectiveSync.isPathExcluded(path)) {
+				if (selectiveSync.isPathExcludedViaSyncList(path)) {
 					if ((isFile(path)) && (cfg.getValueBool("sync_root_files")) && (rootName(strip(path,"./")) == "")) {
 						log.vdebug("Not skipping path due to sync_root_files inclusion: ", path);
 					} else {
-						log.vlog("Skipping item - path excluded by sync_list: ", path);
-						return;
+						string userSyncList = cfg.configDirName ~ "/sync_list";
+						if (exists(userSyncList)){
+							// skipped most likely due to inclusion in sync_list
+							log.vlog("Skipping item - excluded by sync_list config: ", path);
+							return;
+						} else {
+							// skipped for some other reason
+							log.vlog("Skipping item - path excluded by user config: ", path);
+							return;
+						}
 					}
 				}
 			}
@@ -2773,7 +2873,7 @@ final class SyncEngine
 											}
 										} else {
 											// Log that an invalid JSON object was returned
-											log.error("ERROR: onedrive.simpleUpload or session.upload call returned an invalid JSON Object");
+											log.vdebug("onedrive.simpleUpload or session.upload call returned an invalid JSON Object");
 											return;
 										}
 									} else {
@@ -3100,10 +3200,25 @@ final class SyncEngine
 					"lastModifiedDateTime": mtime.toISOExtString()
 				])
 			];
-			auto res = onedrive.updateById(fromItem.driveId, fromItem.id, diff, fromItem.eTag);
-			// update itemdb
+			
+			// Perform the move operation on OneDrive
+			JSONValue response;
+			try {
+				response = onedrive.updateById(fromItem.driveId, fromItem.id, diff, fromItem.eTag);
+			} catch (OneDriveException e) {
+				if (e.httpStatusCode == 412) {
+					// OneDrive threw a 412 error, most likely: ETag does not match current item's value
+					// Retry without eTag
+					log.vdebug("File Move Failed - OneDrive eTag / cTag match issue");
+					log.vlog("OneDrive returned a 'HTTP 412 - Precondition Failed' when attempting to move the file - gracefully handling error");
+					string nullTag = null;
+					// move the file but without the eTag
+					response = onedrive.updateById(fromItem.driveId, fromItem.id, diff, nullTag);
+				}
+			} 
+			// save the move response from OneDrive in the database
 			// Is the response a valid JSON object - validation checking done in saveItem
-			saveItem(res);
+			saveItem(response);
 		}
 	}
 
@@ -3119,7 +3234,12 @@ final class SyncEngine
 			enforce(itemdb.selectByPathNoRemote(path, defaultDriveId, item));
 		}
 		try {
-			uploadDeleteItem(item, path);
+			if (noRemoteDelete) {
+				// do not process remote delete
+				log.vlog("Skipping remote delete as --upload-only & --no-remote-delete configured");
+			} else {
+				uploadDeleteItem(item, path);
+			}
 		} catch (OneDriveException e) {
 			if (e.httpStatusCode == 404) {
 				log.log(e.msg);

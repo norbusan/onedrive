@@ -9,7 +9,7 @@ Additionally, if you are using a 'config' file within your configuration directo
 
 **Invalid configuration:**
 ```text
-skip_file = "= .*|~*"
+skip_file = ".*|~*"
 ```
 **Minimum valid configuration:**
 ```text
@@ -260,7 +260,6 @@ The default configuration file is listed below:
 # debug_https = "false"
 # skip_dotfiles = "false"
 # dry_run = "false"
-# monitor_interval = "45"
 # min_notify_changes = "5"
 # monitor_log_frequency = "5"
 # monitor_fullscan_frequency = "10"
@@ -426,6 +425,31 @@ Currently not supported.
 
 ### SharePoint / Office 365 Shared Libraries
 Refer to [./Office365.md](Office365.md) for configuration assistance.
+
+## Running 'onedrive' in 'monitor' mode
+Monitor mode (`--monitor`) allows the onedrive process to continually monitor your local file system for changes to files.
+
+Two common errors can occur when using monitor mode:
+*   Intialisation failure
+*   Unable to add a new inotify watch
+
+Both of these errors are local environment issues, where the following system variables need to be increased as the current system values are potentially too low:
+*   `fs.file-max`
+*   `fs.inotify.max_user_watches`
+
+To determine what these values are on your system use the following commands:
+```
+sysctl fs.file-max
+sysctl fs.inotify.max_user_watches
+```
+
+To make a change to these variables:
+```
+sudo sysctl fs.file-max=<new_value>
+sudo sysctl fs.inotify.max_user_watches=<new_value>
+```
+
+To make these changes permanent, refer to your OS reference documentation.
 
 ## Running 'onedrive' as a system service
 There are two ways that onedrive can be used as a service
