@@ -100,6 +100,17 @@ void vdebug(T...)(T args)
 	}
 }
 
+void vdebugUpload(T...)(T args)
+{
+	if (verbose >= 2) {
+		writeln("\n[DEBUG] ", args);
+		if(writeLogFile){
+			// Write to log file
+			logfileWriteLine("\n[DEBUG] ", args);
+		}
+	}
+}
+
 void error(T...)(T args)
 {
 	stderr.writeln(args);
@@ -128,6 +139,11 @@ void notify(T...)(T args)
 			auto n = new Notification("OneDrive", result, "IGNORED");
 			try {
 				n.show();
+				// Sent message to notification daemon
+				if (verbose >= 2) {
+					writeln("[DEBUG] Sent notification to notification service. If notification is not displayed, check dbus or notification-daemon for errors");
+				}
+				
 			} catch (Throwable e) {
 				vlog("Got exception from showing notification: ", e);
 			}
