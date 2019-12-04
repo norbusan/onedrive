@@ -1,19 +1,19 @@
 ---
- Makefile.in |    8 ++------
- 1 file changed, 2 insertions(+), 6 deletions(-)
+ Makefile.in |    6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
 
 --- onedrive.git.orig/Makefile.in
 +++ onedrive.git/Makefile.in
-@@ -149,10 +149,6 @@ ifeq ($(COMPLETIONS),yes)
- 	rm -f $(DESTDIR)$(BASH_COMPLETION_DIR)/onedrive
- endif
+@@ -96,11 +96,7 @@ distclean: clean
+ 	      $(system_unit_files) $(user_unit_files)
  
--version:
+ onedrive: $(SOURCES)
 -	if [ -f .git/HEAD ] ; then \
 -		git describe --tags > version ; \
 -	else \
 -		echo $(version) > version ; \
 -	fi
-+version: debian/changelog
 +	echo v$(shell dpkg-parsechangelog  -S version) > version
+ 	$(DC) $(DCFLAGS) $(addprefix -L,$(curl_LIBS)) $(addprefix -L,$(sqlite_LIBS)) $(addprefix -L,$(notify_LIBS)) -L-ldl $(SOURCES) -of$@
  
+ install: all
