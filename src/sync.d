@@ -852,8 +852,10 @@ final class SyncEngine
 					
 					if (!performFullItemScan){
 						// Display the number of changes we are processing
+						// OneDrive ships 'changes' in ~200 bundles. These messages then get displayed for each bundle
 						if (nrChanges >= cfg.getValueLong("min_notify_changes")) {
-							log.logAndNotify("Processing ", nrChanges, " changes");
+							// verbose log, no 'notify' .. it is over the top
+							log.vlog("Processing ", nrChanges, " changes");
 						} else {
 							// There are valid changes
 							log.vdebug("Number of changes from OneDrive to process: ", nrChanges);
@@ -862,7 +864,8 @@ final class SyncEngine
 						// Do not display anything unless we are doing a verbose debug as due to #658 we are essentially doing a --resync each time when using sync_list
 						// Display the number of items we are processing
 						if (nrChanges >= cfg.getValueLong("min_notify_changes")) {
-							log.logAndNotify("Processing ", nrChanges, " OneDrive items to ensure consistent state due to sync_list being used");
+							// verbose log, no 'notify' .. it is over the top
+							log.vlog("Processing ", nrChanges, " OneDrive items to ensure consistent state due to sync_list being used");
 						} else {
 							// There are valid changes
 							log.vdebug("Number of items from OneDrive to process: ", nrChanges);
@@ -2191,7 +2194,7 @@ final class SyncEngine
 					} else {
 						uploadDeleteItem(item, path);
 					}
-				}  else {
+				} else {
 					// file was found in the database
 					// Did we 'fake create it' as part of --dry-run ?
 					foreach (i; idsFaked) {
@@ -2203,7 +2206,12 @@ final class SyncEngine
 					}
 					// item.id did not match a 'faked' download new file creation
 					log.vlog("The file has been deleted locally");
-					uploadDeleteItem(item, path);
+					if (noRemoteDelete) {
+						// do not process remote file delete
+						log.vlog("Skipping remote file delete as --upload-only & --no-remote-delete configured");
+					} else {
+						uploadDeleteItem(item, path);
+					}
 				}
 			}
 		}
