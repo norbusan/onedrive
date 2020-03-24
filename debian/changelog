@@ -1,8 +1,9 @@
 onedrive (2.4.0-1) unstable; urgency=medium
 
   * new upstream release
+  * bump debhelper compat to 12
 
- -- Norbert Preining <norbert@preining.info>  Tue, 24 Mar 2020 16:53:20 +0900
+ -- Norbert Preining <norbert@preining.info>  Tue, 24 Mar 2020 16:57:02 +0900
 
 onedrive (2.3.13-1) unstable; urgency=medium
 

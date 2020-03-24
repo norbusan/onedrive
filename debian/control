@@ -2,7 +2,8 @@ Source: onedrive
 Section: net
 Priority: optional
 Maintainer: Norbert Preining <norbert@preining.info>
-Build-Depends: libcurl4-openssl-dev, libsqlite3-dev, ldc, debhelper (>= 7), chrpath,
+Build-Depends: libcurl4-openssl-dev, libsqlite3-dev, ldc, 
+  debhelper-compat (= 12), chrpath,
   pkg-config, libnotify-dev, bash-completion, systemd
 Standards-Version: 4.2.1
 Homepage: https://github.com/abraunegg/onedrive
