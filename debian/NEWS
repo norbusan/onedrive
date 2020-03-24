@@ -1,3 +1,39 @@
+onedrive (2.4.0-1) unstable; urgency=medium
+
+  The below is an important note regarding the v2.4.0 release.
+
+  As part of the changes required to correctly handle OneDrive 429
+  error responses, a decision was taken to change the Client ID.
+
+  What this means is, after upgrading to v2.4.0, on your next sync,
+  you will be presented with the following message:
+
+    ERROR: OneDrive returned an error with the following message:
+      Error Message: HTTP request returned status code 400 (Bad Request)
+      Error Reason:  AADSTS70000: The provided value for the input parameter
+      'refresh_token' or 'assertion' is not valid. The token was issued for a different client id
+    Trace ID: 06f95eac-45de-478f-8c4c-f1ae4fb90400
+    Correlation ID: 9bbb9e17-546b-4f24-abc5-ee46e54ebe53
+    Timestamp: 2020-03-22 21:56:29Z
+
+    ERROR: OneDrive returned a 'HTTP 401 Unauthorized' - Cannot Initialize Sync Engine
+    ERROR: Check your configuration as your refresh_token may be empty or invalid.
+    You may need to issue a --logout and re-authorise this client.
+
+  What you will need to do is:
+
+  Stop any onedrive service (init.d / systemd) process you have running
+  Issue a --logout & re-authenticate the client
+  If you do not want to do this, then update your 'config' file with the
+  following information:
+
+  application_id = "22c49a0d-d21c-4792-aed1-8f163c982546"
+  This will continue to use the older 'skilion' client identifier and not
+  require re-authentication, however this may increase your chances of
+  getting a OneDrive 429 error.
+
+ -- Norbert Preining <norbert@preining.info>  Tue, 24 Mar 2020 17:10:04 +0900
+
 onedrive (2.1.6-1) unstable; urgency=medium
 
   * OneDrive package switched to new upstream. From upstream's README about
