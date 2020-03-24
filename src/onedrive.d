@@ -12,11 +12,9 @@ static import log;
 shared bool debugResponse = false;
 private bool dryRun = false;
 private bool simulateNoRefreshTokenFile = false;
+private ulong retryAfterValue = 0;
 
 private immutable {
-	// Client Identifier
-	string clientId = "22c49a0d-d21c-4792-aed1-8f163c982546";
-	
 	// Personal & Business Queries
 	string authUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 	string redirectUrl = "https://login.microsoftonline.com/common/oauth2/nativeclient";
@@ -29,10 +27,22 @@ private immutable {
 }
 
 private {
-    string driveUrl = "https://graph.microsoft.com/v1.0/me/drive";
-    string itemByIdUrl = "https://graph.microsoft.com/v1.0/me/drive/items/";
-    string itemByPathUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/";
-    string driveId = "";
+	// Client ID / Application ID (abraunegg)
+	string clientId = "d50ca740-c83f-4d1b-b616-12c519384f0c";
+
+	// Default User Agent configuration
+	string isvTag = "ISV";
+	string companyName = "abraunegg";
+	// Application name as per Microsoft Azure application registration
+	string appTitle = "OneDrive Client for Linux";
+
+	// Default Drive ID
+	string driveId = "";
+
+	// Common URL's
+	string driveUrl = "https://graph.microsoft.com/v1.0/me/drive";
+	string itemByIdUrl = "https://graph.microsoft.com/v1.0/me/drive/items/";
+	string itemByPathUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/";
 }
 
 class OneDriveException: Exception
@@ -101,11 +111,18 @@ final class OneDriveApi
 			.debugResponse = true;
 		}
 
-		// Custom User Agent
-		if (cfg.getValueString("user_agent") != "") {
-			http.setUserAgent = cfg.getValueString("user_agent");
+		// Configure the User Agent string
+		if (cfg.getValueString("user_agent") == "") {
+			// Application User Agent string defaults
+			// Comply with OneDrive traffic decoration requirements
+			// https://docs.microsoft.com/en-us/sharepoint/dev/general-development/how-to-avoid-getting-throttled-or-blocked-in-sharepoint-online
+			// - Identify as ISV and include Company Name, App Name separated by a pipe character and then adding Version number separated with a slash character
+			// Note: If you've created an application, the recommendation is to register and use AppID and AppTitle
+			// The issue here is that currently the application is still using the 'skilion' application ID, thus no idea what the AppTitle used was.
+			http.setUserAgent = isvTag ~ "|" ~ companyName ~ "|" ~ appTitle ~ "/" ~ strip(import("version"));
 		} else {
-			http.setUserAgent = "OneDrive Client for Linux " ~ strip(import("version"));
+			// Use the value entered by the user
+			http.setUserAgent = cfg.getValueString("user_agent");
 		}
 		
 		// What version of HTTP protocol do we use?
@@ -132,6 +149,18 @@ final class OneDriveApi
 
 	bool init()
 	{
+		// Update clientId if application_id is set in config file
+		if (cfg.getValueString("application_id") != "") {
+			// an application_id is set in config file
+			clientId = cfg.getValueString("application_id");
+			companyName = "custom_application";
+		}
+		
+		// detail what we are using for applicaion identification
+		log.vdebug("clientId    = ", clientId);
+		log.vdebug("companyName = ", companyName);
+		log.vdebug("appTitle    = ", appTitle);
+		
 		try {
 			driveId = cfg.getValueString("drive_id");
 			if (driveId.length) {
@@ -174,12 +203,13 @@ final class OneDriveApi
 	{
 		import std.stdio, std.regex;
 		char[] response;
-		string url = authUrl ~ "?client_id=" ~ clientId ~ "&scope=Files.ReadWrite%20Files.ReadWrite.all%20Sites.ReadWrite.All%20offline_access&response_type=code&redirect_uri=" ~ redirectUrl;
+		string url = authUrl ~ "?client_id=" ~ clientId ~ "&scope=Files.ReadWrite%20Files.ReadWrite.all%20Sites.Read.All%20Sites.ReadWrite.All%20offline_access&response_type=code&redirect_uri=" ~ redirectUrl;
 		string authFilesString = cfg.getValueString("auth_files");
 		if (authFilesString == "") {
 			log.log("Authorize this app visiting:\n");
 			write(url, "\n\n", "Enter the response uri: ");
 			readln(response);
+			cfg.applicationAuthorizeResponseUri = true;
 		} else {
 			string[] authFiles = authFilesString.split(":");
 			string authUrl = authFiles[0];
@@ -190,16 +220,27 @@ final class OneDriveApi
 			while (!exists(responseUrl)) {
 				Thread.sleep(dur!("msecs")(100));
 			}
-			response = cast(char[]) read(responseUrl);
+			
+			// read response from OneDrive
+			try {
+				response = cast(char[]) read(responseUrl);
+			} catch (OneDriveException e) {
+				// exception generated
+				displayOneDriveErrorMessage(e.msg);
+				return false;
+			}	
+			
+			// try to remove old files
 			try {
 				std.file.remove(authUrl);
 				std.file.remove(responseUrl);
 			} catch (FileException e) {
 				log.error("Cannot remove files ", authUrl, " ", responseUrl);
+				return false;
 			}
 		}
 		// match the authorization code
-		auto c = matchFirst(response, r"(?:[\?&]code=)([\w\d-]+)");
+		auto c = matchFirst(response, r"(?:[\?&]code=)([\w\d-.]+)");
 		if (c.empty) {
 			log.log("Invalid uri");
 			return false;
@@ -207,6 +248,18 @@ final class OneDriveApi
 		c.popFront(); // skip the whole match
 		redeemToken(c.front);
 		return true;
+	}
+
+	ulong getRetryAfterValue()
+	{
+		// Return the current value of retryAfterValue if it has been set to something other than 0
+		return .retryAfterValue;
+	}
+	
+	void resetRetryAfterValue()
+	{
+		// Reset the current value of retryAfterValue to 0 after it has been used
+		.retryAfterValue = 0;
 	}
 
 	// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/drive_get
@@ -422,7 +475,15 @@ final class OneDriveApi
 
 	private void acquireToken(const(char)[] postData)
 	{
-		JSONValue response = post(tokenUrl, postData);
+		JSONValue response;
+		
+		try {
+			response = post(tokenUrl, postData);
+		} catch (OneDriveException e) {
+			// an error was generated
+			displayOneDriveErrorMessage(e.msg);
+		}
+		
 		if (response.type() == JSONType.object) {
 			if ("access_token" in response){
 				accessToken = "bearer " ~ response["access_token"].str();
@@ -468,9 +529,9 @@ final class OneDriveApi
 		if (!skipToken) addAccessTokenHeader(); // HACK: requestUploadStatus
 		auto response = perform();
 		checkHttpCode(response);
-		// OneDrive API Response Debugging
+		// OneDrive API Response Debugging if --https-debug is being used
 		if (.debugResponse){
-			writeln("OneDrive API Response: ", response);
+			log.vdebug("OneDrive API Response: ", response);
         }
 		return response;
 	}
@@ -619,22 +680,38 @@ final class OneDriveApi
 		char[] content;
 		http.onReceive = (ubyte[] data) {
 			content ~= data;
-			// HTTP Server Response Code Debugging
+			// HTTP Server Response Code Debugging if --https-debug is being used
 			if (.debugResponse){
-				writeln("OneDrive HTTP Server Response: ", http.statusLine.code);
+				log.vdebug("onedrive.perform() => OneDrive HTTP Server Response: ", http.statusLine.code);
 			}
 			return data.length;
 		};
 		
 		JSONValue json;
+		
 		try {
 			http.perform();
+			// Get the HTTP Response headers - needed for correct 429 handling
+			auto responseHeaders = http.responseHeaders();
+			// HTTP Server Response Headers Debugging if --https-debug is being used
+			if (.debugResponse){
+				log.vdebug("onedrive.perform() => HTTP Response Headers: ", responseHeaders);
+			}
+			
+			if ("retry-after" in http.responseHeaders) {
+				// retry-after as in the response headers
+				// Set the value
+				log.vdebug("onedrive.perform() => Received a 'Retry-After' Header Response with the following value: ", http.responseHeaders["retry-after"]);
+				log.vdebug("onedrive.perform() => Setting retryAfterValue to: ", http.responseHeaders["retry-after"]);
+				.retryAfterValue = to!ulong(http.responseHeaders["retry-after"]);
+			}
+			
 		} catch (CurlException e) {
 			// Parse and display error message received from OneDrive
 			log.error("ERROR: OneDrive returned an error with the following message:");
 			auto errorArray = splitLines(e.msg);
 			string errorMessage = errorArray[0];
-			
+						
 			if (canFind(errorMessage, "Couldn't connect to server on handle") ||
 			    canFind(errorMessage, "Couldn't resolve host name on handle")) {
 				// This is a curl timeout
@@ -810,7 +887,7 @@ final class OneDriveApi
 				// Too many requests in a certain time window
 				// https://docs.microsoft.com/en-us/sharepoint/dev/general-development/how-to-avoid-getting-throttled-or-blocked-in-sharepoint-online
 				log.vlog("OneDrive returned a 'HTTP 429 - Too Many Requests' - gracefully handling error");
-				break;
+				throw new OneDriveException(http.statusLine.code, http.statusLine.reason);
 			
 			// Server side (OneDrive) Errors
 			//  500 - Internal Server Error
@@ -869,7 +946,6 @@ final class OneDriveApi
 			// 400 - Bad Request
 			case 400:
 				// Bad Request .. how should we act?
-				log.vlog("OneDrive returned a 'HTTP 400 - Bad Request' - gracefully handling error");
 				// make sure this is thrown so that it is caught
 				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 			
@@ -911,6 +987,21 @@ final class OneDriveApi
 			if (http.statusLine.code / 100 != 2 && http.statusLine.code != 302) {
 				throw new OneDriveException(http.statusLine.code, http.statusLine.reason, response);
 			}
+		}
+	}
+	
+	// Parse and display error message received from OneDrive
+	private void displayOneDriveErrorMessage(string message) {
+		log.error("\nERROR: OneDrive returned an error with the following message:");
+		auto errorArray = splitLines(message);
+		log.error("  Error Message: ", errorArray[0]);
+		// Strip cause from error to leave a JSON
+		JSONValue errorMessage = parseJSON(replace(message, errorArray[0], ""));
+		// extra debug
+		log.vdebug("Raw Error Data: ", message);
+		log.vdebug("JSON Message: ", errorMessage);
+		if (errorMessage.type() == JSONType.object) {
+			log.error("  Error Reason:  ", errorMessage["error_description"].str);
 		}
 	}
 }

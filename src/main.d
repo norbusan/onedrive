@@ -274,7 +274,7 @@ int main(string[] args)
 
 	// Are we able to reach the OneDrive Service
 	bool online = false;
-
+	
 	// dry-run database setup
 	if (cfg.getValueBool("dry_run")) {
 		// Make a copy of the original items.sqlite3 for use as the dry run copy if it exists
@@ -355,37 +355,43 @@ int main(string[] args)
 		string userConfigFilePath = cfg.configDirName ~ "/config";
 		string userSyncList = cfg.configDirName ~ "/sync_list";
 		// Display application version
-		std.stdio.write("onedrive version                    = ", import("version"));
+		writeln("onedrive version                       = ", strip(import("version")));
+		
 		// Display all of the pertinent configuration options
-		writeln("Config path                         = ", cfg.configDirName);
+		writeln("Config path                            = ", cfg.configDirName);
 		
 		// Does a config file exist or are we using application defaults
 		if (exists(userConfigFilePath)){
-			writeln("Config file found in config path    = true");
+			writeln("Config file found in config path       = true");
 		} else {
-			writeln("Config file found in config path    = false");
+			writeln("Config file found in config path       = false");
 		}
 		
 		// Config Options
-		writeln("Config option 'check_nosync'        = ", cfg.getValueBool("check_nosync"));
-		writeln("Config option 'sync_dir'            = ", syncDir);
-		writeln("Config option 'skip_dir'            = ", cfg.getValueString("skip_dir"));
-		writeln("Config option 'skip_file'           = ", cfg.getValueString("skip_file"));
-		writeln("Config option 'skip_dotfiles'       = ", cfg.getValueBool("skip_dotfiles"));
-		writeln("Config option 'skip_symlinks'       = ", cfg.getValueBool("skip_symlinks"));
-		writeln("Config option 'monitor_interval'    = ", cfg.getValueLong("monitor_interval"));
-		writeln("Config option 'min_notify_changes'  = ", cfg.getValueLong("min_notify_changes"));
-		writeln("Config option 'log_dir'             = ", cfg.getValueString("log_dir"));
+		
+		
+		writeln("Config option 'check_nosync'           = ", cfg.getValueBool("check_nosync"));
+		writeln("Config option 'sync_dir'               = ", syncDir);
+		writeln("Config option 'skip_dir'               = ", cfg.getValueString("skip_dir"));
+		writeln("Config option 'skip_file'              = ", cfg.getValueString("skip_file"));
+		writeln("Config option 'skip_dotfiles'          = ", cfg.getValueBool("skip_dotfiles"));
+		writeln("Config option 'skip_symlinks'          = ", cfg.getValueBool("skip_symlinks"));
+		writeln("Config option 'monitor_interval'       = ", cfg.getValueLong("monitor_interval"));
+		writeln("Config option 'min_notify_changes'     = ", cfg.getValueLong("min_notify_changes"));
+		writeln("Config option 'log_dir'                = ", cfg.getValueString("log_dir"));
+		writeln("Config option 'classify_as_big_delete' = ", cfg.getValueLong("classify_as_big_delete"));
+		
+		
 		
 		// Is config option drive_id configured?
 		if (cfg.getValueString("drive_id") != ""){
-			writeln("Config option 'drive_id'            = ", cfg.getValueString("drive_id"));
+			writeln("Config option 'drive_id'               = ", cfg.getValueString("drive_id"));
 		}
 		
 		// Is sync_list configured?
 		if (exists(userSyncList)){
-			writeln("Config option 'sync_root_files'     = ", cfg.getValueBool("sync_root_files"));
-			writeln("Selective sync configured           = true");
+			writeln("Config option 'sync_root_files'        = ", cfg.getValueBool("sync_root_files"));
+			writeln("Selective sync configured              = true");
 			writeln("sync_list contents:");
 			// Output the sync_list contents
 			auto syncListFile = File(userSyncList);
@@ -395,8 +401,8 @@ int main(string[] args)
 				writeln(line);
 			}
 		} else {
-			writeln("Config option 'sync_root_files'     = ", cfg.getValueBool("sync_root_files"));
-			writeln("Selective sync configured           = false");
+			writeln("Config option 'sync_root_files'        = ", cfg.getValueBool("sync_root_files"));
+			writeln("Selective sync configured              = false");
 		}
 		
 		// exit
@@ -407,7 +413,8 @@ int main(string[] args)
 		log.log("NOTE: The use of --force-http-1.1 is depreciated");
 	}
 	
-	log.vlog("Initializing the OneDrive API ...");
+	// Test if OneDrive service can be reached
+	log.vdebug("Testing network to ensure network connectivity to Microsoft OneDrive Service");
 	try {
 		online = testNetwork();
 	} catch (CurlException e) {
@@ -418,8 +425,9 @@ int main(string[] args)
 			return EXIT_FAILURE;
 		}
 	}
-
+	
 	// Initialize OneDrive, check for authorization
+	log.vlog("Initializing the OneDrive API ...");
 	oneDrive = new OneDriveApi(cfg);
 	oneDrive.printAccessToken = cfg.getValueBool("print_token");
 	if (!oneDrive.init()) {
@@ -429,9 +437,8 @@ int main(string[] args)
 		return EXIT_UNAUTHORIZED;
 	}
 	
-	// if --synchronize or --monitor not passed in, exit & display help
+	// if --synchronize or --monitor not passed in, configure the flag to display help & exit
 	auto performSyncOK = false;
-	
 	if (cfg.getValueBool("synchronize") || cfg.getValueBool("monitor")) {
 		performSyncOK = true;
 	}
@@ -443,10 +450,20 @@ int main(string[] args)
 	}
 	
 	if (!performSyncOK) {
-		writeln("\n--synchronize or --monitor missing from your command options or use --help for further assistance\n");
-		writeln("No OneDrive sync will be performed without either of these two arguments being present\n");
-		oneDrive.http.shutdown();
-		return EXIT_FAILURE;
+		// was the application just authorised?
+		if (cfg.applicationAuthorizeResponseUri) {
+			// Application was just authorised
+			log.log("\nApplication has been successfully authorised, however no additional command switches were provided.\n");
+			log.log("Please use --help for further assistance in regards to running this application.\n");
+			oneDrive.http.shutdown();
+			return EXIT_SUCCESS;
+		} else {
+			// Application was not just authorised
+			log.log("\n--synchronize or --monitor switches missing from your command line input. Please add one (not both) of these switches to your command line or use --help for further assistance.\n");
+			log.log("No OneDrive sync will be performed without one of these two arguments being present.\n");
+			oneDrive.http.shutdown();
+			return EXIT_FAILURE;
+		}
 	}
 	
 	// if --synchronize && --monitor passed in, exit & display help as these conflict with each other
@@ -500,9 +517,16 @@ int main(string[] args)
 	selectiveSync.load(cfg.syncListFilePath);
 	
 	// Configure skip_dir & skip_file from config entries
+	// skip_dir items
 	log.vdebug("Configuring skip_dir ...");
 	log.vdebug("skip_dir: ", cfg.getValueString("skip_dir"));
 	selectiveSync.setDirMask(cfg.getValueString("skip_dir"));
+	// Was --skip-dir-strict-match configured?
+	if (cfg.getValueBool("skip_dir_strict_match")) {
+		selectiveSync.setSkipDirStrictMatch();
+	}
+	
+	// skip_file items
 	log.vdebug("Configuring skip_file ...");
 	// Validate skip_file to ensure that this does not contain an invalid configuration
 	// Do not use a skip_file entry of .* as this will prevent correct searching of local changes to process.
@@ -538,9 +562,26 @@ int main(string[] args)
 		}
 	}
 
-	// We should only set noRemoteDelete in an upload-only scenario
-	if ((cfg.getValueBool("upload_only"))&&(cfg.getValueBool("no_remote_delete"))) sync.setNoRemoteDelete();
+	// if sync list is configured, set to true now that the sync engine is initialised
+	if (syncListConfigured) {
+		sync.setSyncListConfigured();
+	}
 	
+	// Do we need to configure specific --upload-only options?
+	if (cfg.getValueBool("upload_only")) {
+		// --upload-only was passed in or configured
+		// was --no-remote-delete passed in or configured
+		if (cfg.getValueBool("no_remote_delete")) {
+			// Configure the noRemoteDelete flag
+			sync.setNoRemoteDelete();
+		}
+		// was --remove-source-files passed in or configured
+		if (cfg.getValueBool("remove_source_files")) {
+			// Configure the localDeleteAfterUpload flag
+			sync.setLocalDeleteAfterUpload();
+		}
+	}
+			
 	// Do we configure to disable the upload validation routine
 	if (cfg.getValueBool("disable_upload_validation")) sync.setDisableUploadValidation();
 	
@@ -665,7 +706,7 @@ int main(string[] args)
 				} catch (CurlException e) {
 					log.vlog("Offline, cannot move item!");
 				} catch(Exception e) {
-					log.logAndNotify("Cannot move item:, ", e.msg);
+					log.logAndNotify("Cannot move item: ", e.msg);
 				}
 			};
 			signal(SIGINT, &exitHandler);

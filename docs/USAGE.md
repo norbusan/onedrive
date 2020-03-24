@@ -29,10 +29,10 @@ The application will attempt to handle instances where you have two files with t
 ### curl compatibility
 If your system utilises curl >= 7.62.0 curl defaults to prefer HTTP/2 over HTTP/1.1 by default. If you wish to use HTTP/2 for some operations you will need to use the `--force-http-2` config option to enable otherwise all operations will use HTTP/1.1.
 
-### First run :zap:
-After installing the application you must run it at least once from the terminal to authorize it.
+### Authorize the application with your OneDrive Account
+After installing the application you must authorize the application with your OneDrive Account. This is done by running the application without any additional command switches.
 
-You will be asked to open a specific link using your web browser where you will have to login into your Microsoft Account and give the application the permission to access your files. After giving the permission, you will be redirected to a blank page. Copy the URI of the blank page into the application.
+You will be asked to open a specific URL by using your web browser where you will have to login into your Microsoft Account and give the application the permission to access your files. After giving permission to the application, you will be redirected to a blank page. Copy the URI of the blank page into the application.
 ```text
 [user@hostname ~]$ onedrive 
 
@@ -44,6 +44,20 @@ Enter the response uri:
 
 ```
 
+**Example:**
+```
+[user@hostname ~]$ onedrive 
+Authorize this app visiting:
+
+https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=22c49a0d-d21c-4792-aed1-8f163c982546&scope=Files.ReadWrite%20Files.ReadWrite.all%20Sites.ReadWrite.All%20offline_access&response_type=code&redirect_uri=https://login.microsoftonline.com/common/oauth2/nativeclient
+
+Enter the response uri: https://login.microsoftonline.com/common/oauth2/nativeclient?code=<redacted>
+
+Application has been successfully authorised, however no additional command switches were provided.
+
+Please use --help for further assistance in regards to running this application.
+```
+
 ### Show your configuration
 To validate your configuration the application will use, utilize the following:
 ```text
@@ -51,17 +65,21 @@ onedrive --display-config
 ```
 This will display all the pertinent runtime interpretation of the options and configuration you are using. This is helpful to validate the client will perform the operations your asking without performing a sync. Example output is as follows:
 ```text
-Config path                         = /home/alex/.config/onedrive
-Config file found in config path    = false
-Config option 'sync_dir'            = /home/alex/OneDrive
-Config option 'skip_dir'            = 
-Config option 'skip_file'           = ~*|.~*|*.tmp
-Config option 'skip_dotfiles'       = false
-Config option 'skip_symlinks'       = false
-Config option 'monitor_interval'    = 45
-Config option 'min_notify_changes'   = 5
-Config option 'log_dir'             = /var/log/onedrive/
-Selective sync configured           = false
+onedrive version                       = vX.Y.Z-A-bcdefghi
+Config path                            = /home/alex/.config/onedrive
+Config file found in config path       = false
+Config option 'check_nosync'           = false
+Config option 'sync_dir'               = /home/alex/OneDrive
+Config option 'skip_dir'               = 
+Config option 'skip_file'              = ~*|.~*|*.tmp
+Config option 'skip_dotfiles'          = false
+Config option 'skip_symlinks'          = false
+Config option 'monitor_interval'       = 45
+Config option 'min_notify_changes'     = 5
+Config option 'log_dir'                = /var/log/onedrive/
+Config option 'classify_as_big_delete' = 1000
+Config option 'sync_root_files'        = false
+Selective sync configured              = false
 ```
 
 ### Testing your configuration
@@ -264,7 +282,11 @@ The default configuration file is listed below:
 # monitor_log_frequency = "5"
 # monitor_fullscan_frequency = "10"
 # sync_root_files = "false"
+# classify_as_big_delete = "1000"
 # user_agent = ""
+# remove_source_files = "false"
+# skip_dir_strict_match = "false"
+# application_id = ""
 ```
 
 
@@ -553,11 +575,11 @@ onedrive --monitor --verbose --confdir="~/.config/onedriveWork" &
 
 ### Automatic syncing of both OneDrive accounts
 
-In order to automatically start syncing your OneDrive accounts, you will need to create a service file for each account. From the `~/onedrive` folder:
+In order to automatically start syncing your OneDrive accounts, you will need to create a service file for each account. From the `/usr/lib/systemd/user` folder:
 ```text
 cp onedrive.service onedrive-work.service
 ```
-And edit the line beginning with `ExecStart` so that the command mirrors the one you used above:
+And edit the line beginning with `ExecStart` so that the confdir mirrors the one you used above:
 ```text
 ExecStart=/usr/local/bin/onedrive --monitor --confdir="/path/to/config/dir"
 ```
@@ -634,6 +656,8 @@ Options:
       Check for the presence of .nosync in the syncdir root. If found, do not perform sync.
   --check-for-nosync
       Check for the presence of .nosync in each directory. If found, skip directory from sync.
+  --classify-as-big-delete
+      Number of children in a path that is locally removed which will be classified as a 'big data delete'
   --confdir ARG
       Set the directory used to store the configuration files
   --create-directory ARG
@@ -656,6 +680,8 @@ Options:
       Perform a trial sync with no changes made
   --enable-logging
       Enable client activity to a separate log file
+  --force
+      Force the deletion of data when a 'big delete' is detected
   --force-http-1.1
       Force the use of HTTP/1.1 for all operations (DEPRECIATED)
   --force-http-2
@@ -688,12 +714,16 @@ Options:
       Print the access token, useful for debugging
   --remove-directory ARG
       Remove a directory on OneDrive - no sync will be performed.
+  --remove-source-files
+      Remove source file after successful transfer to OneDrive when using --upload-only
   --resync
       Forget the last saved state, perform a full sync
   --single-directory ARG
       Specify a single local directory within the OneDrive root to sync.
-  --skip-dir
+  --skip-dir ARG
       Skip any directories that match this pattern from syncing
+  --skip-dir-strict-match
+      When matching skip_dir directories, only match explicit matches
   --skip-dot-files
       Skip dot files and folders from syncing
   --skip-file ARG

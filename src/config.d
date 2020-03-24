@@ -20,6 +20,8 @@ final class Config
 	public string configFileSyncDir;
 	public string configFileSkipFile;
 	public string configFileSkipDir;
+	// was the application just authorised - paste of response uri
+	public bool applicationAuthorizeResponseUri = false;
 		
 	private string userConfigFilePath;
 	// hashmap for the values found in the user config file
@@ -31,7 +33,8 @@ final class Config
 
 	this(string confdirOption)
 	{
-		// default configuration
+		// default configuration - entries in config file ~/.config/onedrive/config
+		// an entry here means it can be set via the config file if there is a coresponding read and set in update_from_args()
 		stringValues["sync_dir"]         = defaultSyncDir;
 		stringValues["skip_file"]        = defaultSkipFile;
 		stringValues["skip_dir"]         = defaultSkipDir;
@@ -62,6 +65,15 @@ final class Config
 		// Number of n sync runs before performing a full local scan of sync_dir
 		// By default 10 which means every ~7.5 minutes a full disk scan of sync_dir will occur
 		longValues["monitor_fullscan_frequency"] = 10;
+		// Number of children in a path that is locally removed which will be classified as a 'big data delete'
+		longValues["classify_as_big_delete"] = 1000;
+		// Delete source after successful transfer
+		boolValues["remove_source_files"] = false;
+		// Strict matching for skip_dir
+		boolValues["skip_dir_strict_match"] = false;
+		// Allow for a custom Client ID / Application ID to be used to replace the inbuilt default
+		// This is a config file option ONLY
+		stringValues["application_id"]       = "";
 
 		// Determine the users home directory. 
 		// Need to avoid using ~ here as expandTilde() below does not interpret correctly when running under init.d or systemd scripts
@@ -163,6 +175,9 @@ final class Config
 		boolValues["logout"]              = false;
 		boolValues["monitor"]             = false;
 		boolValues["synchronize"]         = false;
+		boolValues["force"]               = false;
+		boolValues["remove_source_files"] = false;
+		boolValues["skip_dir_strict_match"] = false;
 
 		// Application Startup option validation
 		try {
@@ -182,6 +197,9 @@ final class Config
 				"check-for-nosync",
 					"Check for the presence of .nosync in each directory. If found, skip directory from sync.",
 					&boolValues["check_nosync"],
+				"classify-as-big-delete",
+					"Number of children in a path that is locally removed which will be classified as a 'big data delete'",
+					&longValues["classify_as_big_delete"],
 				"create-directory",
 					"Create a directory on OneDrive - no sync will be performed.",
 					&stringValues["create_directory"],
@@ -218,6 +236,9 @@ final class Config
 				"force-http-2",
 					"Force the use of HTTP/2 for all operations where applicable",
 					&boolValues["force_http_2"],
+				"force",
+					"Force the deletion of data when a 'big delete' is detected",
+					&boolValues["force"],
 				"get-file-link",
 					"Display the file link of a synced file",
 					&stringValues["get_file_link"],
@@ -260,6 +281,9 @@ final class Config
 				"remove-directory",
 					"Remove a directory on OneDrive - no sync will be performed.",
 					&stringValues["remove_directory"],
+				"remove-source-files",
+					"Remove source file after successful transfer to OneDrive when using --upload-only",
+					&boolValues["remove_source_files"],
 				"single-directory",
 					"Specify a single local directory within the OneDrive root to sync.",
 					&stringValues["single_directory"],
@@ -275,6 +299,9 @@ final class Config
 				"skip-size",
 					"Skip new files larger than this size (in MB)",
 					&longValues["skip_size"],
+				"skip-dir-strict-match",
+					"When matching skip_dir directories, only match explicit matches",
+					&boolValues["skip_dir_strict_match"],
 				"skip-symlinks",
 					"Skip syncing of symlinks",
 					&boolValues["skip_symlinks"],
@@ -435,7 +462,7 @@ void outputLongHelp(Option[] opt)
 		"--skip-file",
 		"--source-directory",
 		"--syncdir",
-	        "--user-agent" ];
+		"--user-agent" ];
 	writeln(`OneDrive - a client for OneDrive Cloud Services
 
 Usage:
@@ -469,4 +496,3 @@ unittest
 	cfg.load("config");
 	assert(cfg.getValueString("sync_dir") == "~/OneDrive");
 }
-
