@@ -1,6 +1,9 @@
 onedrive (2.4.0-2) UNRELEASED; urgency=medium
 
   * Trim trailing whitespace.
+  * Set upstream metadata fields: Bug-Database, Bug-Submit (from
+    ./configure), Name (from ./configure), Repository, Repository-
+    Browse.
 
  -- Debian Janitor <janitor@jelmer.uk>  Mon, 04 May 2020 23:00:23 +0000
 
