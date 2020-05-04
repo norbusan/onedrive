@@ -2,7 +2,7 @@ Source: onedrive
 Section: net
 Priority: optional
 Maintainer: Norbert Preining <norbert@preining.info>
-Build-Depends: libcurl4-openssl-dev, libsqlite3-dev, ldc, 
+Build-Depends: libcurl4-openssl-dev, libsqlite3-dev, ldc,
   debhelper-compat (= 12), chrpath,
   pkg-config, libnotify-dev, bash-completion, systemd
 Standards-Version: 4.2.1
@@ -17,5 +17,5 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, init-system-helpers (>= 1.51)
 Description: folder synchronization with OneDrive
  OneDrive is the cloud storage system of Microsoft. This package provides
- the command line client specialising in synchronizing with OneDrive cloud 
+ the command line client specialising in synchronizing with OneDrive cloud
  storage.
