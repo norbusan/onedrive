@@ -1,11 +1,15 @@
-onedrive (2.4.0-2) UNRELEASED; urgency=medium
+onedrive (2.4.2-1) unstable; urgency=medium
 
+  [ Debian Janitor ]
   * Trim trailing whitespace.
   * Set upstream metadata fields: Bug-Database, Bug-Submit (from
     ./configure), Name (from ./configure), Repository, Repository-
     Browse.
 
- -- Debian Janitor <janitor@jelmer.uk>  Mon, 04 May 2020 23:00:23 +0000
+  [ Norbert Preining ]
+  * new upstream release
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 27 May 2020 08:06:04 +0900
 
 onedrive (2.4.0-1) unstable; urgency=medium
 
