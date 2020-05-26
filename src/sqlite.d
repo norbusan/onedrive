@@ -87,6 +87,7 @@ struct Database
 		int rc = sqlite3_exec(pDb, toStringz(sql), null, null, null);
 		if (rc != SQLITE_OK) {
 			log.error("\nA database execution error occurred: "~ getErrorMessage() ~ "\n");
+			log.error("Please retry your command with --resync to fix any local database corruption issues.\n");
 			close();
 			exit(-1);
 		}
@@ -175,7 +176,8 @@ struct Statement
 				row.length = 0;
 			} else if (rc == SQLITE_ROW) {
 				// https://www.sqlite.org/c3ref/data_count.html
-				int count = sqlite3_data_count(pStmt);
+				int count = 0;
+				count = sqlite3_data_count(pStmt);
 				row = new const(char)[][count];
 				foreach (size_t i, ref column; row) {
 					// https://www.sqlite.org/c3ref/column_blob.html
@@ -184,6 +186,7 @@ struct Statement
 			} else {
 				string errorMessage = ifromStringz(sqlite3_errmsg(sqlite3_db_handle(pStmt)));
 				log.error("\nA database statement execution error occurred: "~ errorMessage ~ "\n");
+				log.error("Please retry your command with --resync to fix any local database corruption issues.\n");
 				exit(-1);
 			}
 		}

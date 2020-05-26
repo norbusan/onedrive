@@ -174,9 +174,12 @@ struct UploadSession
 			p.title = "Uploading";
 			long fragmentCount = 0;
 			
+			// Initialise the download bar at 0%
+			p.next();
+			
 			while (true) {
 				fragmentCount++;
-				log.vdebugUpload("Fragment: ", fragmentCount, " of ", iteration);
+				log.vdebugNewLine("Fragment: ", fragmentCount, " of ", iteration);
 				p.next();
 				long fragSize = fragmentSize < fileSize - offset ? fragmentSize : fileSize - offset;
 				// If the resume upload fails, we need to check for a return code here
@@ -189,6 +192,10 @@ struct UploadSession
 						fileSize
 					);
 				} catch (OneDriveException e) {
+					// if a 100 response is generated, continue
+					if (e.httpStatusCode == 100) {
+						continue;
+					}
 					// there was an error response from OneDrive when uploading the file fragment
 					// handle 'HTTP request returned status code 429 (Too Many Requests)' first
 					if (e.httpStatusCode == 429) {

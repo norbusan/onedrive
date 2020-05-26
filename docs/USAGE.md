@@ -23,7 +23,7 @@ skip_file = "~*|.~*|*.tmp"
 Do not use a skip_file entry of `.*` as this will prevent correct searching of local changes to process.
 
 ### Local File and Folder Naming Conventions
-The files and directories in the synchronization directory must follow the [Windows naming conventions](https://msdn.microsoft.com/en-us/library/aa365247).
+The files and directories in the synchronization directory must follow the [Windows naming conventions](https://docs.microsoft.com/windows/win32/fileio/naming-a-file).
 The application will attempt to handle instances where you have two files with the same names but with different capitalization. Where there is a namespace clash, the file name which clashes will not be synced. This is expected behavior and won't be fixed.
 
 ### curl compatibility
@@ -74,7 +74,7 @@ Config option 'skip_dir'               =
 Config option 'skip_file'              = ~*|.~*|*.tmp
 Config option 'skip_dotfiles'          = false
 Config option 'skip_symlinks'          = false
-Config option 'monitor_interval'       = 45
+Config option 'monitor_interval'       = 300
 Config option 'min_notify_changes'     = 5
 Config option 'log_dir'                = /var/log/onedrive/
 Config option 'classify_as_big_delete' = 1000
@@ -246,7 +246,7 @@ nano ~/.config/onedrive/config
 ```
 This file does not get created by default, and should only be created if you want to change the 'default' operational parameters.
 
-See the [config](config) file for the full list of options, and [All available commands](https://github.com/abraunegg/onedrive/blob/master/docs/USAGE.md#all-available-commands) for all possible keys and there default values.
+See the [config](https://raw.githubusercontent.com/abraunegg/onedrive/master/config) file for the full list of options, and [All available commands](https://github.com/abraunegg/onedrive/blob/master/docs/USAGE.md#all-available-commands) for all possible keys and there default values.
 
 The default configuration file is listed below:
 ```text
@@ -259,7 +259,7 @@ The default configuration file is listed below:
 #
 # sync_dir = "~/OneDrive"
 # skip_file = "~*|.~*|*.tmp"
-# monitor_interval = "45"
+# monitor_interval = "300"
 # skip_dir = ""
 # log_dir = "/var/log/onedrive/"
 # drive_id = ""
@@ -287,8 +287,9 @@ The default configuration file is listed below:
 # remove_source_files = "false"
 # skip_dir_strict_match = "false"
 # application_id = ""
+# resync = "false"
+# bypass_data_preservation = "false"
 ```
-
 
 
 ### 'config' file configuration examples:
@@ -302,7 +303,7 @@ Example:
 #
 sync_dir="~/MyDirToSync"
 # skip_file = "~*|.~*|*.tmp"
-# monitor_interval = "45"
+# monitor_interval = "300"
 # skip_dir = ""
 # log_dir = "/var/log/onedrive/"
 ```
@@ -321,7 +322,7 @@ Example:
 #
 # sync_dir = "~/OneDrive"
 # skip_file = "~*|.~*|*.tmp"
-# monitor_interval = "45"
+# monitor_interval = "300"
 skip_dir = "Desktop|Documents/IISExpress|Documents/SQL Server Management Studio|Documents/Visual Studio*|Documents/WindowsPowerShell"
 # log_dir = "/var/log/onedrive/"
 ```
@@ -339,7 +340,7 @@ Example:
 #
 # sync_dir = "~/OneDrive"
 skip_file = "~*|Documents/OneNote*|Documents/config.xlaunch|myfile.ext"
-# monitor_interval = "45"
+# monitor_interval = "300"
 # skip_dir = ""
 # log_dir = "/var/log/onedrive/"
 ```
@@ -366,7 +367,7 @@ Example:
 # debug_https = "false"
 skip_dotfiles = "true"
 # dry_run = "false"
-# monitor_interval = "45"
+# monitor_interval = "300"
 ```
 Setting this to `"true"` will skip all .files and .folders while syncing.
 
@@ -386,17 +387,17 @@ Example:
 ```text
 # skip_dotfiles = "false"
 # dry_run = "false"
-monitor_interval = "300"
+monitor_interval = "600"
 # min_notify_changes = "5"
 # monitor_log_frequency = "5"
 ```
-The monitor interval is defined as the wait time 'between' sync's when running in monitor mode. By default without configuration, the monitor_interval is set to 45 seconds. Setting this value to 300 will run the sync process every 5 minutes.
+The monitor interval is defined as the wait time 'between' sync's when running in monitor mode. By default without configuration, the monitor_interval is set to 300 seconds. Setting this value to 600 will run the sync process every 10 minutes.
 
 #### min_notify_changes
 Example:
 ```text
 # dry_run = "false"
-# monitor_interval = "45"
+# monitor_interval = "300"
 min_notify_changes = "50"
 # monitor_log_frequency = "5"
 # monitor_fullscan_frequency = "10"
