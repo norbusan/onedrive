@@ -1,3 +1,9 @@
+onedrive (2.4.3-1) unstable; urgency=medium
+
+  * new upstream release
+
+ -- Norbert Preining <norbert@preining.info>  Thu, 02 Jul 2020 13:29:53 +0900
+
 onedrive (2.4.2-1) unstable; urgency=medium
 
   [ Debian Janitor ]
