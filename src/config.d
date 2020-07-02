@@ -19,10 +19,13 @@ final class Config
 	public string syncListFilePath = "";
 	public string homePath = "";
 	public string configDirName = "";
+	public string systemConfigDirName = "";
 	public string configFileSyncDir = "";
 	public string configFileSkipFile = "";
 	public string configFileSkipDir = "";
+	public string businessSharedFolderFilePath = "";
 	private string userConfigFilePath = "";
+	private string systemConfigFilePath = "";
 	// was the application just authorised - paste of response uri
 	public bool applicationAuthorizeResponseUri = false;
 	// hashmap for the values found in the user config file
@@ -31,8 +34,9 @@ final class Config
 	private string[string] stringValues;
 	private bool[string] boolValues;
 	private long[string] longValues;
+	// Compile time regex - this does not change
 	public auto configRegex = ctRegex!(`^(\w+)\s*=\s*"(.*)"\s*$`);
-
+	
 	this(string confdirOption)
 	{
 		// default configuration - entries in config file ~/.config/onedrive/config
@@ -82,6 +86,24 @@ final class Config
 		// Ignore data safety checks and overwrite local data rather than preserve & rename
 		// This is a config file option ONLY
 		boolValues["bypass_data_preservation"] = false;
+		// Support National Azure AD endpoints as per https://docs.microsoft.com/en-us/graph/deployments
+		// By default, if empty, use standard Azure AD URL's
+		// Will support the following options:
+		// - USL4
+		//     AD Endpoint:    https://login.microsoftonline.us
+		//     Graph Endpoint: https://graph.microsoft.us
+		// - USL5
+		//     AD Endpoint:    https://login.microsoftonline.us
+		//     Graph Endpoint: https://dod-graph.microsoft.us
+		// - DE
+		//     AD Endpoint:    https://portal.microsoftazure.de
+		//     Graph Endpoint: 	https://graph.microsoft.de
+		// - CN
+		//     AD Endpoint:    https://login.chinacloudapi.cn
+		//     Graph Endpoint: 	https://microsoftgraph.chinacloudapi.cn
+		stringValues["azure_ad_endpoint"] = "";
+		// Allow enable / disable of the syncing of OneDrive Business Shared Folders via configuration file
+		boolValues["sync_business_shared_folders"] = false;
 		
 		// DEVELOPER OPTIONS 
 		// display_memory = true | false
@@ -122,6 +144,7 @@ final class Config
 		
 		// Determine the correct configuration directory to use
 		string configDirBase;
+		string systemConfigDirBase;
 		if (confdirOption != "") {
 			// A CLI 'confdir' was passed in
 			log.vdebug("configDirName: CLI override to set configDirName to: ", confdirOption);
@@ -141,6 +164,8 @@ final class Config
 				// XDG_CONFIG_HOME does not exist on systems where X11 is not present - ie - headless systems / servers
 				log.vdebug("configDirBase: WARNING - no XDG_CONFIG_HOME environment variable set");
 				configDirBase = homePath ~ "/.config";
+				// Also set up a path to pre-shipped shared configs (which can be overridden by supplying a config file in userspace)
+				systemConfigDirBase = "/etc";
 			}
 	
 			// Output configDirBase calculation
@@ -149,12 +174,15 @@ final class Config
 			log.vdebug("configDirName: Configuring application to use default config path");
 			// configDirBase contains the correct path so we do not need to check for presence of '~'
 			configDirName = configDirBase ~ "/onedrive";
+			// systemConfigDirBase contains the correct path so we do not need to check for presence of '~'
+			systemConfigDirName = systemConfigDirBase ~ "/onedrive";
 		}
 		
 		// Config directory options all determined
-		// configDirName has a trailing /
-		log.vlog("Using Config Dir: ", configDirName);
 		if (!exists(configDirName)) mkdirRecurse(configDirName);
+		// configDirName has a trailing /
+		log.vlog("Using 'user' Config Dir: ", configDirName);
+		log.vlog("Using 'system' Config Dir: ", systemConfigDirName);
 		
 		// Update application set variables based on configDirName
 		refreshTokenFilePath = buildNormalizedPath(configDirName ~ "/refresh_token");
@@ -164,6 +192,8 @@ final class Config
 		uploadStateFilePath = buildNormalizedPath(configDirName ~ "/resume_upload");
 		userConfigFilePath = buildNormalizedPath(configDirName ~ "/config");
 		syncListFilePath = buildNormalizedPath(configDirName ~ "/sync_list");
+		systemConfigFilePath = buildNormalizedPath(systemConfigDirName ~ "/config");
+		businessSharedFolderFilePath = buildNormalizedPath(configDirName ~ "/business_shared_folders");
 		
 		// Debug Output for application set variables based on configDirName
 		log.vdebug("refreshTokenFilePath = ", refreshTokenFilePath);
@@ -173,17 +203,35 @@ final class Config
 		log.vdebug("uploadStateFilePath = ", uploadStateFilePath);
 		log.vdebug("userConfigFilePath = ", userConfigFilePath);
 		log.vdebug("syncListFilePath = ", syncListFilePath);
+		log.vdebug("systemConfigFilePath = ", systemConfigFilePath);
+		log.vdebug("businessSharedFolderFilePath = ", businessSharedFolderFilePath);
 	}
 
 	bool initialize()
 	{
 		// Initialise the application
 		if (!exists(userConfigFilePath)) {
-			// configuration file does not exist
-			log.vlog("No config file found, using application defaults");
-			return true;
+			// 'user' configuration file does not exist
+			// Is there a system configuration file?
+			if (!exists(systemConfigFilePath)) {
+				// 'system' configuration file does not exist
+				log.vlog("No user or system config file found, using application defaults");
+				return true;
+			} else {
+				// 'system' configuration file exists
+				// can we load the configuration file without error?
+				if (load(systemConfigFilePath)) {
+					// configuration file loaded without error
+					log.log("System configuration file successfully loaded");
+					return true;
+				} else {
+					// there was a problem loading the configuration file
+					log.log("System configuration file has errors - please check your configuration");
+					return false;
+				}
+			}
 		} else {
-			// configuration file exists
+			// 'user' configuration file exists
 			// can we load the configuration file without error?
 			if (load(userConfigFilePath)) {
 				// configuration file loaded without error
@@ -217,13 +265,16 @@ final class Config
 		boolValues["force"]               = false;
 		boolValues["remove_source_files"] = false;
 		boolValues["skip_dir_strict_match"] = false;
-
+		boolValues["list_business_shared_folders"] = false;
+		
 		// Application Startup option validation
 		try {
 			string tmpStr;
 			bool tmpBol;
 			long tmpVerb;
+			// duplicated from main.d to get full help output!
 			auto opt = getopt(
+				
 				args,
 				std.getopt.config.bundling,
 				std.getopt.config.caseSensitive,
@@ -261,7 +312,7 @@ final class Config
 					"Display the sync status of the client - no sync will be performed.",
 					&boolValues["display_sync_status"],
 				"download-only",
-					"Only download remote changes",
+					"Replicate the OneDrive online state locally, by only downloading changes from OneDrive. Do not upload local changes to OneDrive.",
 					&boolValues["download_only"],
 				"dry-run",
 					"Perform a trial sync with no changes made",
@@ -357,12 +408,11 @@ final class Config
 					"Sync all files in sync_dir root when using sync_list.",
 					&boolValues["sync_root_files"],
 				"upload-only",
-					"Only upload to OneDrive, do not sync changes from OneDrive locally",
+					"Replicate the locally configured sync_dir state to OneDrive, by only uploading local changes to OneDrive. Do not download changes from OneDrive.",
 					&boolValues["upload_only"],
 				"user-agent",
 					"Specify a User Agent string to the http client",
 					&stringValues["user_agent"],
-				// duplicated from main.d to get full help output!
 				"confdir",
 					"Set the directory used to store the configuration files",
 					&tmpStr,
@@ -371,7 +421,13 @@ final class Config
 					&tmpVerb,
 				"version",
 					"Print the version and exit",
-					&tmpBol
+					&tmpBol,
+				"list-shared-folders",
+					"List OneDrive Business Shared Folders",
+					&boolValues["list_business_shared_folders"],
+				"sync-shared-folders",
+					"Sync OneDrive Business Shared Folders",
+					&boolValues["sync_business_shared_folders"]
 			);
 			if (opt.helpWanted) {
 				outputLongHelp(opt.options);
@@ -486,6 +542,30 @@ final class Config
 						if (key == "sync_dir") configFileSyncDir = c.front.dup;
 						if (key == "skip_file") configFileSkipFile = c.front.dup;
 						if (key == "skip_dir") configFileSkipDir = c.front.dup;
+						// Azure AD Configuration
+						if (key == "azure_ad_endpoint") {
+							string azureConfigValue = c.front.dup;
+							switch(azureConfigValue) {
+								case "":
+									log.log("Using config option for Global Azure AD Endpoints");
+									break;
+								case "USL4":
+									log.log("Using config option for Azure AD for US Government Endpoints");
+									break;
+								case "USL5":
+									log.log("Using config option for Azure AD for US Government Endpoints (DOD)");
+									break;
+								case "DE":
+									log.log("Using config option for Azure AD Germany");
+									break;
+								case "CN":
+									log.log("Using config option for Azure AD China operated by 21Vianet");
+									break;
+								// Default - all other entries 
+								default:
+									log.log("Unknown Azure AD Endpoint - using Global Azure AD Endpoints");
+							}
+						}
 					} else {
 						auto ppp = key in longValues;
 						if (ppp) {

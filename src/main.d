@@ -23,6 +23,10 @@ int main(string[] args)
 	
 	// main function variables
 	string confdirOption;
+	string configFilePath;
+	string syncListFilePath;
+	string databaseFilePath;
+	string businessSharedFolderFilePath;
 	string currentConfigHash;
 	string currentSyncListHash;
 	string previousConfigHash;
@@ -32,7 +36,11 @@ int main(string[] args)
 	string configBackupFile;
 	string syncDir;
 	string logOutputMessage;
+	string currentBusinessSharedFoldersHash;
+	string previousBusinessSharedFoldersHash;
+	string businessSharedFoldersHashFile;
 	bool configOptionsDifferent = false;
+	bool businessSharedFoldersDifferent = false;
 	bool syncListConfigured = false;
 	bool syncListDifferent = false;
 	bool syncDirDifferent = false;
@@ -137,6 +145,12 @@ int main(string[] args)
 	// update configuration from command line args
 	cfg.update_from_args(args);
 	
+	// Initialise normalised file paths
+	configFilePath = buildNormalizedPath(cfg.configDirName ~ "/config");
+	syncListFilePath = buildNormalizedPath(cfg.configDirName ~ "/sync_list");
+	databaseFilePath = buildNormalizedPath(cfg.configDirName ~ "/items.db");
+	businessSharedFolderFilePath = buildNormalizedPath(cfg.configDirName ~ "/business_shared_folders");
+	
 	// Has any of our configuration that would require a --resync been changed?
 	// 1. sync_list file modification
 	// 2. config file modification - but only if sync_dir, skip_dir, skip_file or drive_id was modified
@@ -144,21 +158,28 @@ int main(string[] args)
 	configHashFile = buildNormalizedPath(cfg.configDirName ~ "/.config.hash");
 	syncListHashFile = buildNormalizedPath(cfg.configDirName ~ "/.sync_list.hash");
 	configBackupFile = buildNormalizedPath(cfg.configDirName ~ "/.config.backup");
+	businessSharedFoldersHashFile = buildNormalizedPath(cfg.configDirName ~ "/.business_shared_folders.hash");
 	
 	// Does a config file exist with a valid hash file
-	if ((exists(buildNormalizedPath(cfg.configDirName ~ "/config"))) && (!exists(configHashFile))) {
+	if ((exists(configFilePath)) && (!exists(configHashFile))) {
 		// Hash of config file needs to be created
-		std.file.write(configHashFile, computeQuickXorHash(buildNormalizedPath(cfg.configDirName ~ "/config")));
+		std.file.write(configHashFile, computeQuickXorHash(configFilePath));
 	}
 	
 	// Does a sync_list file exist with a valid hash file
-	if ((exists(buildNormalizedPath(cfg.configDirName ~ "/sync_list"))) && (!exists(syncListHashFile))) {
+	if ((exists(syncListFilePath)) && (!exists(syncListHashFile))) {
 		// Hash of sync_list file needs to be created
-		std.file.write(syncListHashFile, computeQuickXorHash(buildNormalizedPath(cfg.configDirName ~ "/sync_list")));
+		std.file.write(syncListHashFile, computeQuickXorHash(syncListFilePath));
+	}
+	
+	// check if business_shared_folders & business_shared_folders hash exists
+	if ((exists(businessSharedFolderFilePath)) && (!exists(businessSharedFoldersHashFile))) {
+		// Hash of business_shared_folders file needs to be created
+		std.file.write(businessSharedFoldersHashFile, computeQuickXorHash(businessSharedFolderFilePath));
 	}
 	
 	// If hash files exist, but config files do not ... remove the hash, but only if --resync was issued as now the application will use 'defaults' which 'may' be different
-	if ((!exists(buildNormalizedPath(cfg.configDirName ~ "/config"))) && (exists(configHashFile))) {
+	if ((!exists(configFilePath)) && (exists(configHashFile))) {
 		// if --resync safe remove config.hash and config.backup
 		if (cfg.getValueBool("resync")) {
 			safeRemove(configHashFile);
@@ -167,22 +188,36 @@ int main(string[] args)
 	}
 	
 	// If sync_list hash file exists, but sync_list file does not ... remove the hash, but only if --resync was issued as now the application will use 'defaults' which 'may' be different
-	if ((!exists(buildNormalizedPath(cfg.configDirName ~ "/sync_list"))) && (exists(syncListHashFile))) {
+	if ((!exists(syncListFilePath)) && (exists(syncListHashFile))) {
 		// if --resync safe remove sync_list.hash
 		if (cfg.getValueBool("resync")) safeRemove(syncListHashFile);
 	}
 	
+	if ((!exists(businessSharedFolderFilePath)) && (exists(businessSharedFoldersHashFile))) {
+		// if --resync safe remove business_shared_folders.hash
+		if (cfg.getValueBool("resync")) safeRemove(businessSharedFoldersHashFile);
+	}
+	
 	// Read config hashes if they exist
-	if (exists(buildNormalizedPath(cfg.configDirName ~ "/config"))) currentConfigHash = computeQuickXorHash(buildNormalizedPath(cfg.configDirName ~ "/config"));
-	if (exists(buildNormalizedPath(cfg.configDirName ~ "/sync_list"))) currentSyncListHash = computeQuickXorHash(buildNormalizedPath(cfg.configDirName ~ "/sync_list"));
+	if (exists(configFilePath)) currentConfigHash = computeQuickXorHash(configFilePath);
+	if (exists(syncListFilePath)) currentSyncListHash = computeQuickXorHash(syncListFilePath);
+	if (exists(businessSharedFolderFilePath)) currentBusinessSharedFoldersHash = computeQuickXorHash(businessSharedFolderFilePath);
 	if (exists(configHashFile)) previousConfigHash = readText(configHashFile);
 	if (exists(syncListHashFile)) previousSyncListHash = readText(syncListHashFile);
+	if (exists(businessSharedFoldersHashFile)) previousBusinessSharedFoldersHash = readText(businessSharedFoldersHashFile);
 	
 	// Was sync_list file updated?
 	if (currentSyncListHash != previousSyncListHash) {
 		// Debugging output to assist what changed
 		log.vdebug("sync_list file has been updated, --resync needed");
 		syncListDifferent = true;
+	}
+	
+	// Was business_shared_folders updated?
+	if (currentBusinessSharedFoldersHash != previousBusinessSharedFoldersHash) {
+		// Debugging output to assist what changed
+		log.vdebug("business_shared_folders file has been updated, --resync needed");
+		businessSharedFoldersDifferent = true;
 	}
 	
 	// Was config file updated between last execution ang this execution?
@@ -254,26 +289,26 @@ int main(string[] args)
 					// we are not in a dry-run scenario
 					// update config hash
 					log.vdebug("updating config hash as it is out of date");
-					std.file.write(configHashFile, computeQuickXorHash(cfg.configDirName ~ "/config"));
+					std.file.write(configHashFile, computeQuickXorHash(configFilePath));
 					// create backup copy of current config file
 					log.vdebug("making backup of config file as it is out of date");
-					std.file.copy(cfg.configDirName ~ "/config", configBackupFile);
+					std.file.copy(configFilePath, configBackupFile);
 				}
 			}
 		}
 	}
 	
 	// Is there a backup of the config file if the config file exists?
-	if ((exists(buildNormalizedPath(cfg.configDirName ~ "/config"))) && (!exists(configBackupFile))) {
+	if ((exists(configFilePath)) && (!exists(configBackupFile))) {
 		// create backup copy of current config file
-		std.file.copy(buildNormalizedPath(cfg.configDirName ~ "/config"), configBackupFile);
+		std.file.copy(configFilePath, configBackupFile);
 	}
 	
 	// config file set options can be changed via CLI input, specifically these will impact sync and --resync will be needed:
 	//  --syncdir ARG
 	//  --skip-file ARG
 	//  --skip-dir ARG
-	if (exists(buildNormalizedPath(cfg.configDirName ~ "/config"))) {
+	if (exists(configFilePath)) {
 		// config file exists
 		// was the sync_dir updated by CLI?
 		if (cfg.configFileSyncDir != "") {
@@ -307,7 +342,7 @@ int main(string[] args)
 	}
 	
 	// Has anything triggered a --resync requirement?
-	if (configOptionsDifferent || syncListDifferent || syncDirDifferent || skipFileDifferent || skipDirDifferent) {
+	if (configOptionsDifferent || syncListDifferent || syncDirDifferent || skipFileDifferent || skipDirDifferent || businessSharedFoldersDifferent) {
 		// --resync needed, is the user just testing configuration changes?
 		if (!cfg.getValueBool("display_config")){
 			// not testing configuration changes
@@ -319,18 +354,23 @@ int main(string[] args)
 				// --resync issued, update hashes of config files if they exist
 				if (!cfg.getValueBool("dry_run")) {
 					// not doing a dry run, update hash files if config & sync_list exist
-					if (exists(buildNormalizedPath(cfg.configDirName ~ "/config"))) {
+					if (exists(configFilePath)) {
 						// update hash
 						log.vdebug("updating config hash as --resync issued");
-						std.file.write(configHashFile, computeQuickXorHash(buildNormalizedPath(cfg.configDirName ~ "/config")));
+						std.file.write(configHashFile, computeQuickXorHash(configFilePath));
 						// create backup copy of current config file
 						log.vdebug("making backup of config file as --resync issued");
-						std.file.copy(buildNormalizedPath(cfg.configDirName ~ "/config"), configBackupFile);
+						std.file.copy(configFilePath, configBackupFile);
 					}
-					if (exists(buildNormalizedPath(cfg.configDirName ~ "/sync_list"))) {
+					if (exists(syncListFilePath)) {
 						// update sync_list hash
 						log.vdebug("updating sync_list hash as --resync issued");
-						std.file.write(syncListHashFile, computeQuickXorHash(buildNormalizedPath(cfg.configDirName ~ "/sync_list")));
+						std.file.write(syncListHashFile, computeQuickXorHash(syncListFilePath));
+					}
+					if (exists(businessSharedFolderFilePath)) {
+						// update business_shared_folders hash
+						log.vdebug("updating business_shared_folders hash as --resync issued");
+						std.file.write(businessSharedFoldersHashFile, computeQuickXorHash(businessSharedFolderFilePath));
 					}
 				}
 			}
@@ -401,9 +441,9 @@ int main(string[] args)
 	log.setNotifications(cfg.getValueBool("monitor") && !cfg.getValueBool("disable_notifications"));
 	
 	// Application upgrades - skilion version etc
-	if (exists(buildNormalizedPath(cfg.configDirName ~ "/items.db"))) {
+	if (exists(databaseFilePath)) {
 		if (!cfg.getValueBool("dry_run")) {
-			safeRemove(buildNormalizedPath(cfg.configDirName ~ "/items.db"));
+			safeRemove(databaseFilePath);
 		}
 		log.logAndNotify("Database schema changed, resync needed");
 		cfg.setValueBool("resync", true);
@@ -428,20 +468,12 @@ int main(string[] args)
 	
 	// Display current application configuration, no application initialisation
 	if (cfg.getValueBool("display_config")){
-		string userConfigFilePath = buildNormalizedPath(cfg.configDirName ~ "/config");
-		string userSyncList = buildNormalizedPath(cfg.configDirName ~ "/sync_list");
 		// Display application version
 		writeln("onedrive version                       = ", strip(import("version")));
-		
 		// Display all of the pertinent configuration options
 		writeln("Config path                            = ", cfg.configDirName);
-		
 		// Does a config file exist or are we using application defaults
-		if (exists(userConfigFilePath)){
-			writeln("Config file found in config path       = true");
-		} else {
-			writeln("Config file found in config path       = false");
-		}
+		writeln("Config file found in config path       = ", exists(configFilePath));
 		
 		// Config Options
 		writeln("Config option 'check_nosync'           = ", cfg.getValueBool("check_nosync"));
@@ -461,12 +493,12 @@ int main(string[] args)
 		}
 		
 		// Is sync_list configured?
-		if (exists(userSyncList)){
+		if (exists(syncListFilePath)){
 			writeln("Config option 'sync_root_files'        = ", cfg.getValueBool("sync_root_files"));
-			writeln("Selective sync configured              = true");
+			writeln("Selective sync 'sync_list' configured  = true");
 			writeln("sync_list contents:");
 			// Output the sync_list contents
-			auto syncListFile = File(userSyncList);
+			auto syncListFile = File(syncListFilePath);
 			auto range = syncListFile.byLine();
 			foreach (line; range)
 			{
@@ -474,10 +506,25 @@ int main(string[] args)
 			}
 		} else {
 			writeln("Config option 'sync_root_files'        = ", cfg.getValueBool("sync_root_files"));
-			writeln("Selective sync configured              = false");
+			writeln("Selective sync 'sync_list' configured  = false");
 		}
 		
-		// exit
+		// Is business_shared_folders configured
+		if (exists(businessSharedFolderFilePath)){
+			writeln("Business Shared Folders configured     = true");
+			writeln("business_shared_folders contents:");
+			// Output the business_shared_folders contents
+			auto businessSharedFolderFileList = File(businessSharedFolderFilePath);
+			auto range = businessSharedFolderFileList.byLine();
+			foreach (line; range)
+			{
+				writeln(line);
+			}
+		} else {
+			writeln("Business Shared Folders configured     = false");
+		}
+		
+		// Exit
 		return EXIT_SUCCESS;
 	}
 	
@@ -516,9 +563,9 @@ int main(string[] args)
 		performSyncOK = true;
 	}
 	
-	// create-directory, remove-directory, source-directory, destination-directory 
+	// create-directory, remove-directory, source-directory, destination-directory
 	// these are activities that dont perform a sync, so to not generate an error message for these items either
-	if (((cfg.getValueString("create_directory") != "") || (cfg.getValueString("remove_directory") != "")) || ((cfg.getValueString("source_directory") != "") && (cfg.getValueString("destination_directory") != "")) || (cfg.getValueString("get_file_link") != "") || (cfg.getValueString("get_o365_drive_id") != "") || cfg.getValueBool("display_sync_status")) {
+	if (((cfg.getValueString("create_directory") != "") || (cfg.getValueString("remove_directory") != "")) || ((cfg.getValueString("source_directory") != "") && (cfg.getValueString("destination_directory") != "")) || (cfg.getValueString("get_file_link") != "") || (cfg.getValueString("get_o365_drive_id") != "") || cfg.getValueBool("display_sync_status") || cfg.getValueBool("list_business_shared_folders")) {
 		performSyncOK = true;
 	}
 	
@@ -578,11 +625,13 @@ int main(string[] args)
 	
 	// Configure selective sync by parsing and getting a regex for skip_file config component
 	auto selectiveSync = new SelectiveSync();
-	if (exists(cfg.syncListFilePath)){
+	
+	// load sync_list if it exists
+	if (exists(syncListFilePath)){
 		log.vdebug("Loading user configured sync_list file ...");
 		syncListConfigured = true;
 		// list what will be synced
-		auto syncListFile = File(cfg.syncListFilePath);
+		auto syncListFile = File(syncListFilePath);
 		auto range = syncListFile.byLine();
 		foreach (line; range)
 		{
@@ -594,7 +643,20 @@ int main(string[] args)
 			syncListFile.close();
 		}
 	}
-	selectiveSync.load(cfg.syncListFilePath);
+	selectiveSync.load(syncListFilePath);
+	
+	// load business_shared_folders if it exists
+	if (exists(businessSharedFolderFilePath)){
+		log.vdebug("Loading user configured business_shared_folders file ...");
+		// list what will be synced
+		auto businessSharedFolderFileList = File(businessSharedFolderFilePath);
+		auto range = businessSharedFolderFileList.byLine();
+		foreach (line; range)
+		{
+			log.vdebug("business_shared_folders: ", line);
+		}
+	}
+	selectiveSync.loadSharedFolders(businessSharedFolderFilePath);
 	
 	// Configure skip_dir, skip_file, skip-dir-strict-match & skip_dotfiles from config entries
 	// Handle skip_dir configuration in config file
@@ -681,6 +743,15 @@ int main(string[] args)
 		sync.setBypassDataPreservation();
 	}
 	
+	// Are we configured to use a National Cloud Deployment
+	if (cfg.getValueString("azure_ad_endpoint") != "") {
+		// value is configured, is it a valid value?
+		if ((cfg.getValueString("azure_ad_endpoint") == "USL4") || (cfg.getValueString("azure_ad_endpoint") == "USL5") || (cfg.getValueString("azure_ad_endpoint") == "DE") || (cfg.getValueString("azure_ad_endpoint") == "CN")) {
+			// valid entries to flag we are using a National Cloud Deployment
+			sync.setNationalCloudDeployment();
+		}
+	}
+	
 	// Do we need to validate the syncDir to check for the presence of a '.nosync' file
 	if (cfg.getValueBool("check_nomount")) {
 		// we were asked to check the mounts
@@ -714,11 +785,42 @@ int main(string[] args)
 	// Are we obtaining the Office 365 Drive ID for a given Office 365 SharePoint Shared Library?
 	if (cfg.getValueString("get_o365_drive_id") != "") {
 		sync.querySiteCollectionForDriveID(cfg.getValueString("get_o365_drive_id"));
+		// Exit application 
+		// Use exit scopes to shutdown API
+		return EXIT_SUCCESS;
 	}
 	
 	// Are we obtaining the URL path for a synced file?
 	if (cfg.getValueString("get_file_link") != "") {
 		sync.queryOneDriveForFileURL(cfg.getValueString("get_file_link"), syncDir);
+		// Exit application 
+		// Use exit scopes to shutdown API
+		return EXIT_SUCCESS;
+	}
+	
+	// Are we listing OneDrive Business Shared Folders
+	if (cfg.getValueBool("list_business_shared_folders")) {
+		// Is this a business account type?
+		if (sync.getAccountType() == "business"){
+			// List OneDrive Business Shared Folders
+			sync.listOneDriveBusinessSharedFolders();
+		} else {
+			log.error("ERROR: Unsupported account type for listing OneDrive Business Shared Folders");
+		}
+		// Exit application 
+		// Use exit scopes to shutdown API
+		return EXIT_SUCCESS;
+	}
+	
+	// Are we going to sync OneDrive Business Shared Folders
+	if (cfg.getValueBool("sync_business_shared_folders")) {
+		// Is this a business account type?
+		if (sync.getAccountType() == "business"){
+			// Configure flag to sync business folders
+			sync.setSyncBusinessFolders();
+		} else {
+			log.error("ERROR: Unsupported account type for syncing OneDrive Business Shared Folders");
+		}
 	}
 	
 	// Are we displaying the sync status of the client?
@@ -734,13 +836,16 @@ int main(string[] args)
 	
 	// Are we performing a sync, or monitor operation?
 	if ((cfg.getValueBool("synchronize")) || (cfg.getValueBool("monitor"))) {
+		// Initialise the monitor class, so that we can do more granular inotify handling when performing the actual sync
+		// needed for --synchronize and --monitor handling
+		Monitor m = new Monitor(selectiveSync);
 
 		if (cfg.getValueBool("synchronize")) {
 			if (online) {
 				// Check user entry for local path - the above chdir means we are already in ~/OneDrive/ thus singleDirectory is local to this path
-				if (cfg.getValueString("single_directory") != ""){
+				if (cfg.getValueString("single_directory") != "") {
 					// Does the directory we want to sync actually exist?
-					if (!exists(cfg.getValueString("single_directory"))){
+					if (!exists(cfg.getValueString("single_directory"))) {
 						// the requested directory does not exist .. 
 						log.logAndNotify("ERROR: The requested local directory does not exist. Please check ~/OneDrive/ for requested path");
 						// Use exit scopes to shutdown API
@@ -750,14 +855,14 @@ int main(string[] args)
 				// perform a --synchronize sync
 				// fullScanRequired = false, for final true-up
 				// but if we have sync_list configured, use syncListConfigured which = true
-				performSync(sync, cfg.getValueString("single_directory"), cfg.getValueBool("download_only"), cfg.getValueBool("local_first"), cfg.getValueBool("upload_only"), LOG_NORMAL, false, syncListConfigured, displaySyncOptions);
+				performSync(sync, cfg.getValueString("single_directory"), cfg.getValueBool("download_only"), cfg.getValueBool("local_first"), cfg.getValueBool("upload_only"), LOG_NORMAL, false, syncListConfigured, displaySyncOptions, cfg.getValueBool("monitor"), m);
 			}
 		}
 			
 		if (cfg.getValueBool("monitor")) {
 			log.logAndNotify("Initializing monitor ...");
 			log.log("OneDrive monitor interval (seconds): ", cfg.getValueLong("monitor_interval"));
-			Monitor m = new Monitor(selectiveSync);
+			
 			m.onDirCreated = delegate(string path) {
 				// Handle .folder creation if skip_dotfiles is enabled
 				if ((cfg.getValueBool("skip_dotfiles")) && (selectiveSync.isDotFile(path))) {
@@ -858,7 +963,15 @@ int main(string[] args)
 				}
 				
 				auto currTime = MonoTime.currTime();
-				if (currTime - lastCheckTime > checkInterval) {
+				// has monitor_interval elapsed or are we at application startup / monitor startup?
+				// in a --resync scenario, if we have not 're-populated' the database, valid changes will get skipped:
+				//   Monitor directory: ./target
+				//   Monitor directory: target/2eVPInOMTFNXzRXeNMEoJch5OR9XpGby
+				//   [M] Item moved: random_files/2eVPInOMTFNXzRXeNMEoJch5OR9XpGby -> target/2eVPInOMTFNXzRXeNMEoJch5OR9XpGby
+				//   Moving random_files/2eVPInOMTFNXzRXeNMEoJch5OR9XpGby to target/2eVPInOMTFNXzRXeNMEoJch5OR9XpGby
+				//   Skipping uploading this new file as parent path is not in the database: target/2eVPInOMTFNXzRXeNMEoJch5OR9XpGby
+				// 'target' should be in the DB, it should also exist online, but because of --resync, it does not exist in the database thus parent check fails
+				if ((currTime - lastCheckTime > checkInterval) || (monitorLoopFullCount == 0)) {
 					// monitor sync loop
 					logOutputMessage = "################################################## NEW LOOP ##################################################";
 					if (displaySyncOptions) {
@@ -916,10 +1029,10 @@ int main(string[] args)
 						}
 						try {
 							// perform a --monitor sync
-							log.vlog("Starting a sync with OneDrive");
-							performSync(sync, cfg.getValueString("single_directory"), cfg.getValueBool("download_only"), cfg.getValueBool("local_first"), cfg.getValueBool("upload_only"), (logMonitorCounter == logInterval ? MONITOR_LOG_QUIET : MONITOR_LOG_SILENT), fullScanRequired, syncListConfiguredFullScanOverride, displaySyncOptions);
+							if (logMonitorCounter == logInterval) log.log("Starting a sync with OneDrive");
+							performSync(sync, cfg.getValueString("single_directory"), cfg.getValueBool("download_only"), cfg.getValueBool("local_first"), cfg.getValueBool("upload_only"), (logMonitorCounter == logInterval ? MONITOR_LOG_QUIET : MONITOR_LOG_SILENT), fullScanRequired, syncListConfiguredFullScanOverride, displaySyncOptions, cfg.getValueBool("monitor"), m);
 							if (!cfg.getValueBool("download_only")) {
-								// discard all events that may have been generated by the sync
+								// discard all events that may have been generated by the sync that have not already been handled
 								try {
 									m.update(false);
 								} catch (MonitorException e) {
@@ -927,6 +1040,7 @@ int main(string[] args)
 									log.error("ERROR: The following inotify error was generated: ", e.msg);
 								}
 							}
+							if (logMonitorCounter == logInterval) log.log("Sync with OneDrive is complete");
 						} catch (CurlException e) {
 							// we already tried three times in the performSync routine
 							// if we still have problems, then the sync handle might have
@@ -938,7 +1052,6 @@ int main(string[] args)
 						log.log("Cannot initialize connection to OneDrive");
 					}
 					// performSync complete, set lastCheckTime to current time
-					log.vlog("Sync with OneDrive is complete");
 					fullScanRequired = false;
 					if (syncListConfigured) {
 						syncListConfiguredFullScanOverride = false;
@@ -1008,7 +1121,7 @@ bool initSyncEngine(SyncEngine sync)
 }
 
 // try to synchronize the folder three times
-void performSync(SyncEngine sync, string singleDirectory, bool downloadOnly, bool localFirst, bool uploadOnly, long logLevel, bool fullScanRequired, bool syncListConfiguredFullScanOverride, bool displaySyncOptions)
+void performSync(SyncEngine sync, string singleDirectory, bool downloadOnly, bool localFirst, bool uploadOnly, long logLevel, bool fullScanRequired, bool syncListConfiguredFullScanOverride, bool displaySyncOptions, bool monitorEnabled, Monitor m)
 {
 	int count;
 	string remotePath = "/";
@@ -1123,7 +1236,27 @@ void performSync(SyncEngine sync, string singleDirectory, bool downloadOnly, boo
 								log.vdebug(logOutputMessage);
 								log.vdebug(syncCallLogOutput);
 							}
-							sync.scanForDifferences(localPath);
+							
+							// What sort of local scan do we want to do?
+							// In --monitor mode, when performing the DB scan, a race condition occurs where by if a file or folder is moved during this process
+							// the inotify event is discarded once performSync() is finished (see m.update(false) above), so these events need to be handled
+							// This can be remediated by breaking the DB and file system scan into separate processes, and handing any applicable inotify events in between
+							if (!monitorEnabled) {
+								// --synchronize in use
+								// standard process flow
+								sync.scanForDifferences(localPath);
+							} else {
+								// --monitor in use
+								// Use individual calls with inotify checks between to avoid a race condition between these 2 functions
+								// Database scan
+								sync.scanForDifferencesDatabaseScan(localPath);
+								// handle any inotify events that occured 'whilst' we were scanning the database
+								m.update(true);
+								// Filesystem walk to find new files not uploaded
+								sync.scanForDifferencesFilesystemScan(localPath);
+								// handle any inotify events that occured 'whilst' we were scanning the local filesystem
+								m.update(true);
+							}
 							
 							// At this point, all OneDrive changes / local changes should be uploaded and in sync
 							// This MAY not be the case when using sync_list, thus a full walk of OneDrive ojects is required
