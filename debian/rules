@@ -7,7 +7,8 @@ export DC=ldc2
 
 override_dh_auto_configure:
 	dh_auto_configure -- --enable-completions --enable-notifications \
-		--with-zsh-completion-dir=/usr/share/zsh/vendor-completions
+		--with-zsh-completion-dir=/usr/share/zsh/vendor-completions \
+		--with-fish-completion-dir=/usr/share/fish/completions
 
 override_dh_auto_build:
 	make
