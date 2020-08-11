@@ -2,9 +2,9 @@
  Makefile.in |    6 +-----
  1 file changed, 1 insertion(+), 5 deletions(-)
 
---- onedrive.git.orig/Makefile.in
-+++ onedrive.git/Makefile.in
-@@ -96,11 +96,7 @@ distclean: clean
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -97,11 +97,7 @@ distclean: clean
  	      $(system_unit_files) $(user_unit_files)
  
  onedrive: $(SOURCES)
