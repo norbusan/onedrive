@@ -565,7 +565,7 @@ int main(string[] args)
 	
 	// create-directory, remove-directory, source-directory, destination-directory
 	// these are activities that dont perform a sync, so to not generate an error message for these items either
-	if (((cfg.getValueString("create_directory") != "") || (cfg.getValueString("remove_directory") != "")) || ((cfg.getValueString("source_directory") != "") && (cfg.getValueString("destination_directory") != "")) || (cfg.getValueString("get_file_link") != "") || (cfg.getValueString("get_o365_drive_id") != "") || cfg.getValueBool("display_sync_status") || cfg.getValueBool("list_business_shared_folders")) {
+	if (((cfg.getValueString("create_directory") != "") || (cfg.getValueString("remove_directory") != "")) || ((cfg.getValueString("source_directory") != "") && (cfg.getValueString("destination_directory") != "")) || (cfg.getValueString("get_file_link") != "") || (cfg.getValueString("create_share_link") != "") || (cfg.getValueString("get_o365_drive_id") != "") || cfg.getValueBool("display_sync_status") || cfg.getValueBool("list_business_shared_folders")) {
 		performSyncOK = true;
 	}
 	
@@ -700,8 +700,8 @@ int main(string[] args)
 			// Use exit scopes to shutdown API
 			return EXIT_FAILURE;
 		} else {
-			if (cfg.getValueString("get_file_link") == "") {
-				// Print out that we are initializing the engine only if we are not grabbing the file link
+			if ((cfg.getValueString("get_file_link") == "") && (cfg.getValueString("create_share_link") == "")) {
+				// Print out that we are initializing the engine only if we are not grabbing the file link or creating a shareable link
 				log.logAndNotify("Initializing the Synchronization Engine ...");
 			}
 		}
@@ -790,8 +790,18 @@ int main(string[] args)
 		return EXIT_SUCCESS;
 	}
 	
+	// Are we createing an anonymous read-only shareable link for an existing file on OneDrive?
+	if (cfg.getValueString("create_share_link") != "") {
+		// Query OneDrive for the file, and if valid, create a shareable link for the file
+		sync.createShareableLinkForFile(cfg.getValueString("create_share_link"));
+		// Exit application 
+		// Use exit scopes to shutdown API
+		return EXIT_SUCCESS;
+	}
+	
 	// Are we obtaining the URL path for a synced file?
 	if (cfg.getValueString("get_file_link") != "") {
+		// Query OneDrive for the file link
 		sync.queryOneDriveForFileURL(cfg.getValueString("get_file_link"), syncDir);
 		// Exit application 
 		// Use exit scopes to shutdown API
@@ -846,10 +856,10 @@ int main(string[] args)
 				if (cfg.getValueString("single_directory") != "") {
 					// Does the directory we want to sync actually exist?
 					if (!exists(cfg.getValueString("single_directory"))) {
-						// the requested directory does not exist .. 
-						log.logAndNotify("ERROR: The requested local directory does not exist. Please check ~/OneDrive/ for requested path");
-						// Use exit scopes to shutdown API
-						return EXIT_FAILURE;
+						// The requested path to use with --single-directory does not exist locally within the configured 'sync_dir'
+						log.logAndNotify("WARNING: The requested path for --single-directory does not exist locally. Creating requested path within ", syncDir);
+						// Make the required path locally
+						mkdirRecurse(cfg.getValueString("single_directory"));
 					}
 				}
 				// perform a --synchronize sync

@@ -7,7 +7,7 @@ This project has been packaged for the following Linux distributions:
 *   Debian, available from the package repository as [onedrive](https://packages.debian.org/sid/net/onedrive)
 *   Fedora, available via package repositories as [onedrive](https://koji.fedoraproject.org/koji/packageinfo?packageID=26044)
 *   NixOS, use package `onedrive` either by adding it to `configuration.nix` or by using the command `nix-env -iA <channel name>.onedrive`. This does not install a service. To install a service, use unstable channel (will stabilize in 20.09) and add `services.onedrive.enable=true` in `configuration.nix`. You can also add a custom package using the `services.onedrive.package` option (recommended since package lags upstream). Enabling the service installs a default package too (based on the channel). You can also add multiple onedrive accounts trivially, see [documentation](https://github.com/NixOS/nixpkgs/pull/77734#issuecomment-575874225)`.
-*   openSUSE, available for Tumbleweed as [onedrive](https://software.opensuse.org/package/onedrive) - just install using: `zypper in onedrive`
+*   openSUSE, available for Tumbleweed as [onedrive](https://software.opensuse.org/package/onedrive) 
 *   Slackware, available from the slackbuilds.org repository as [onedrive](https://slackbuilds.org/repository/14.2/network/onedrive/)
 *   Solus, available from the package repository as [onedrive](https://dev.getsol.us/search/query/FB7PIf1jG9Z9/#R)
 *   Ubuntu, available as a package from the following PPA [onedrive](https://launchpad.net/~yann1ck/+archive/ubuntu/onedrive)
@@ -15,17 +15,37 @@ This project has been packaged for the following Linux distributions:
 #### Important Note:
 Distribution packages may be of an older release when compared to the latest release that is [available](https://github.com/abraunegg/onedrive/releases). If a package is out of date, please contact the package maintainer for resolution.
 
-#### Important information for Ubuntu users:
-Whilst there are [onedrive](https://packages.ubuntu.com/search?keywords=onedrive&searchon=names&suite=all&section=all) packages available for Ubuntu, do not install 'onedrive' from these packages. These packages are out of date and should not be used. If you wish to use a package, use the PPA listed above.
+#### Important information for all Ubuntu and Ubuntu based distribution users:
+This information is specifically for the following platforms and distributions:
+*   Ubuntu
+*   Lubuntu
+*   Linux Mint
+*   POP OS
+*   Peppermint OS
+
+Whilst there are [onedrive](https://packages.ubuntu.com/search?keywords=onedrive&searchon=names&suite=all&section=all) packages available for Ubuntu, do not install 'onedrive' from these packages via `apt install onedrive`. These packages are out-of-date and should not be used. If you wish to use a package, it is highly recommended that you utilise the Ubuntu PPA listed above. If the Ubuntu PPA does not support your distribution or version, your only option is to compile from source using the relevant Ubuntu instructions below.
+
+If you wish to change this situation so that you can just use 'apt install onedrive', consider becoming the Ubuntu package maintainer and contribute back to the community.
 
 ## Build Requirements
 *   Build environment must have at least 1GB of memory & 1GB swap space
 *   [libcurl](http://curl.haxx.se/libcurl/)
 *   [SQLite 3](https://www.sqlite.org/) >= 3.7.15
-*   [Digital Mars D Compiler (DMD)](http://dlang.org/download.html)
+*   [Digital Mars D Compiler (DMD)](http://dlang.org/download.html) or [LDC – the LLVM-based D Compiler](https://github.com/ldc-developers/ldc)
 
 **Note:** DMD version >= 2.083.1 or LDC version >= 1.12.0 is required to compile this application
 
+### Example for installing DMD Compiler
+```text
+curl -fsS https://dlang.org/install.sh | bash -s dmd
+```
+
+### Example for installing LDC Compiler
+```text
+curl -fsS https://dlang.org/install.sh | bash -s ldc
+```
+
+## Distribution Package Dependencies
 ### Dependencies: Ubuntu 16.x - i386 / i686 (less than 1GB Memory) 
 **Important:** Build environment must have at least 512 of memory & 1GB swap space
 
@@ -86,7 +106,13 @@ Second, install the DMD compiler as per below:
 curl -fsS https://dlang.org/install.sh | bash -s dmd
 ```
 
-### Dependencies: Ubuntu 18.x / Lubuntu 18.x / Debian 9 - i386 / i686 
+### Dependencies: Ubuntu 18.x / Lubuntu 18.x / Debian 9 - i386 / i686
+These dependencies are also applicable for all Ubuntu based distributions such as:
+*   Lubuntu
+*   Linux Mint
+*   POP OS
+*   Peppermint OS
+
 **Important:** The DMD compiler cannot be used in its default configuration on Ubuntu 18.x / Lubuntu 18.x / Debian 9 i386 / i686 architectures due to an issue in the Ubuntu / Debian linking process. See [https://issues.dlang.org/show_bug.cgi?id=19116](https://issues.dlang.org/show_bug.cgi?id=19116) for further details.
 
 **Note:** Ubuntu 18.x validated with the DMD compiler on the following Ubuntu i386 / i686 platform:
@@ -133,6 +159,11 @@ sudo update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/ld.bfd" 10
 ```
 
 ### Dependencies: Ubuntu 18.x, Ubuntu 19.x, Ubuntu 20.x / Debian 9, Debian 10 - x86_64
+These dependencies are also applicable for all Ubuntu based distributions such as:
+*   Lubuntu
+*   Linux Mint
+*   POP OS
+*   Peppermint OS
 ```text
 sudo apt install build-essential
 sudo apt install libcurl4-openssl-dev
@@ -292,6 +323,7 @@ as far as possible automatically, but can be overridden by passing
 
 ### Building using a different compiler (for example [LDC](https://wiki.dlang.org/LDC))
 #### ARMHF Architecture
+**Note:** Build environment must have at least 1GB of memory & 1GB swap space. Check with `swapon -s`
 ```text
 git clone https://github.com/abraunegg/onedrive.git
 cd onedrive
@@ -301,6 +333,7 @@ sudo make install
 ```
 
 #### ARM64 Architecture
+**Note:** Build environment must have at least 1GB of memory & 1GB swap space. Check with `swapon -s`
 ```text
 git clone https://github.com/abraunegg/onedrive.git
 cd onedrive

@@ -324,6 +324,8 @@ The issue here is around how the client stores the sync_dir path in the database
 
 **Note:** After changing `sync_dir`, you must perform a full re-synchronization by adding `--resync` to your existing command line - for example: `onedrive --synchronize --resync`
 
+**Important Note:** If your `sync_dir` is pointing to a network mount point (a network share via NFS, Windows Network Share, Samba Network Share) these types of network mount points do not support 'inotify', thus tracking real-time changes via inotify of local files is not possible. Local filesystem changes will be replicated between the local filesystem and OneDrive based on the `monitor_interval` value. This is not something (inotify support for NFS, Samba) that this client can fix.
+
 #### skip_dir
 Example: 
 ```text
@@ -339,6 +341,17 @@ skip_dir = "Desktop|Documents/IISExpress|Documents/SQL Server Management Studio|
 Patterns are case insensitive. `*` and `?` [wildcards characters](https://technet.microsoft.com/en-us/library/bb490639.aspx) are supported. Use `|` to separate multiple patterns.
 
 **Important:** Entries under `skip_dir` are relative to your `sync_dir` path.
+
+**Note:** The `skip_dir` can be specified multiple times, for example:
+```text
+skip_dir = "SomeDir|OtherDir|ThisDir|ThatDir"
+skip_dir = "/Path/To/A/Directory"
+skip_dir = "/Another/Path/To/Different/Directory"
+```
+This will be interpreted the same as:
+```text
+skip_dir = "SomeDir|OtherDir|ThisDir|ThatDir|/Path/To/A/Directory|/Another/Path/To/Different/Directory"
+```
 
 **Note:** After changing `skip_dir`, you must perform a full re-synchronization by adding `--resync` to your existing command line - for example: `onedrive --synchronize --resync`
 
@@ -367,6 +380,17 @@ By default, the following files will be skipped:
 *   Files that end in .tmp
 
 **Important:** Do not use a skip_file entry of `.*` as this will prevent correct searching of local changes to process.
+
+**Note:** The `skip_file` can be specified multiple times, for example:
+```text
+skip_file = "~*|.~*|*.tmp|*.swp"
+skip_file = "*.blah"
+skip_file = "never_sync.file"
+```
+This will be interpreted the same as:
+```text
+skip_file = "~*|.~*|*.tmp|*.swp|*.blah|never_sync.file"
+```
 
 **Note:** after changing `skip_file`, you must perform a full re-synchronization by adding `--resync` to your existing command line - for example: `onedrive --synchronize --resync`
 
@@ -421,20 +445,32 @@ Each line of the file represents a relative path from your `sync_dir`. All files
 Here is an example of `sync_list`:
 ```text
 # sync_list supports comments
-# Exclude my Backup folder
+# Include my Backup folder
 Backup
-# Exclude this single document
+# Include Documents folder
+Documents/
+# Exclude temp folders under Documents
+!Documents/temp*
+# Include all PDF documents
+Documents/*.pdf
+# Include this single document
 Documents/latest_report.docx
-# Exclude all Work/Project directories
+# Include all Work/Project directories
 Work/Project*
 notes.txt
-# Exclude /Blender in the ~OneDrive root but not if elsewhere
+# Include /Blender in the ~OneDrive root but not if elsewhere
 /Blender
+# Include these names if they match any file or folder
 Cinema Soc
 Codes
 Textbooks
 Year 2
 ```
+The following are supported for pattern matching and exclusion rules:
+*   Use the `*` to wildcard select any characters to match for the item to be included
+*   Use either `!` or `-` characters at the start of the line to exclude an otherwise included item
+
+
 **Note:** after changing the sync_list, you must perform a full re-synchronization by adding `--resync` to your existing command line - for example: `onedrive --synchronize --resync`
 
 ### How to 'skip' directories from syncing?
@@ -595,6 +631,8 @@ onedrive --monitor --verbose --confdir="~/.config/onedriveWork" &
 *   `--monitor` keeps the application running and monitoring for changes both local and remote
 *   `&` puts the application in background and leaves the terminal interactive
 
+**Important:** For each configuration, change the 'sync_dir' to a new value, unique for each specific configuration. Leaving this at the default of `sync_dir = "~/OneDrive"` will cause all data from both accounts to be synced to the same folder, then to each other.
+
 ### Automatic syncing of both OneDrive accounts
 In order to automatically start syncing your OneDrive accounts, you will need to create a service file for each account. From the applicable 'user systemd folder':
 *   RHEL / CentOS: `/usr/lib/systemd/system`
@@ -686,6 +724,8 @@ Options:
       Set the directory used to store the configuration files
   --create-directory ARG
       Create a directory on OneDrive - no sync will be performed.
+  --create-share-link ARG
+      Create a shareable link for an existing file on OneDrive
   --debug-https
       Debug OneDrive HTTPS communication.
   --destination-directory ARG
