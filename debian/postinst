@@ -8,7 +8,7 @@ case $action in
     restart_units="`systemctl list-units --no-legend --type=service --state=running 'onedrive*' | awk '{print$1}'`"
     if ! [ "x$restart_units" = "x" ] ; then
       echo -n "Restarting running Onedrive processes ... "
-      for unit in `systemctl list-units --no-legend --type=service --state=running 'onedrive*' | awk '{print$1}'` ; do
+      for unit in $restart_units ; do
         echo -n "$unit "
         systemctl restart "$unit"
       done
