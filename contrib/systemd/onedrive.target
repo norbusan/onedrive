@@ -1,0 +1,14 @@
+# onedrive.target
+# This target is solely available to make sure that we can restart all
+# related onedrive processes when an upgrade happens.
+# All the onedrive*.service contain
+#	PartOf=onedrive.target
+# which allows instanced system services as well as user services
+# to be restart
+
+[Unit]
+Description=OneDrive Master
+Before=multi-user.target
+
+[Install]
+WantedBy=multi-user.target

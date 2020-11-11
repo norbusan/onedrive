@@ -3,6 +3,7 @@ Description=OneDrive Free Client for %i
 Documentation=https://github.com/abraunegg/onedrive
 After=network-online.target
 Wants=network-online.target
+PartOf=onedrive.target
 
 [Service]
 ExecStart=@prefix@/bin/onedrive --monitor --confdir=/home/%i/.config/onedrive

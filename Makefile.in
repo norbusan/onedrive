@@ -52,7 +52,7 @@ endif
 DCFLAGS += $(NOTIF_VERSIONS)
 endif
 
-system_unit_files = contrib/systemd/onedrive@.service
+system_unit_files = contrib/systemd/onedrive@.service contrib/systemd/onedrive.target
 user_unit_files = contrib/systemd/onedrive.service
 
 DOCFILES = README.md config LICENSE CHANGELOG.md docs/Docker.md docs/INSTALL.md docs/Office365.md docs/USAGE.md docs/BusinessSharedFolders.md
