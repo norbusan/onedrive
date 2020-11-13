@@ -2,7 +2,7 @@
 Description=OneDrive Free Client for %i
 Documentation=https://github.com/abraunegg/onedrive
 After=network-online.target
-Wants=network-online.target
+Wants=network-online.target onedrive.target
 PartOf=onedrive.target
 
 [Service]

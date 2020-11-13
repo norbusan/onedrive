@@ -8,7 +8,4 @@
 
 [Unit]
 Description=OneDrive Master
-Before=multi-user.target
-
-[Install]
-WantedBy=multi-user.target
+Documentation=man onedrive
