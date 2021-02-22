@@ -213,7 +213,8 @@ private bool isPathExcluded(string path, string[] allowedPaths)
 {
 	// function variables
 	bool exclude = false;
-	bool finalResult = true; // will get updated to false, if pattern matched to sync_list entry
+	bool excludeMatched = false; // will get updated to true, if there is a pattern match to sync_list entry
+	bool finalResult = true; // will get updated to false, if pattern match to sync_list entry
 	int offset;
 	string wildcard = "*";
 	
@@ -230,17 +231,31 @@ private bool isPathExcluded(string path, string[] allowedPaths)
 		// is this an inclusion path or finer grained exclusion?
 		switch (allowedPath[0]) {
 			case '-':
-				// allowed path starts with '-', this user wants to exclude this path
+				// sync_list path starts with '-', this user wants to exclude this path
 				exclude = true;
-				offset = 1;
+				// If the sync_list entry starts with '-/' offset needs to be 2, else 1
+				if (startsWith(allowedPath, "-/")){
+					// Offset needs to be 2
+					offset = 2;
+				} else {
+					// Offset needs to be 1
+					offset = 1;
+				}
 				break;
 			case '!':
-				// allowed path starts with '!', this user wants to exclude this path
+				// sync_list path starts with '!', this user wants to exclude this path
 				exclude = true;
-				offset = 1;
+				// If the sync_list entry starts with '!/' offset needs to be 2, else 1
+				if (startsWith(allowedPath, "!/")){
+					// Offset needs to be 2
+					offset = 2;
+				} else {
+					// Offset needs to be 1
+					offset = 1;
+				}
 				break;
 			case '/':
-				// allowed path starts with '/', this user wants to include this path
+				// sync_list path starts with '/', this user wants to include this path
 				// but a '/' at the start causes matching issues, so use the offset for comparison
 				exclude = false;
 				offset = 1;
@@ -269,6 +284,7 @@ private bool isPathExcluded(string path, string[] allowedPaths)
 			} else {
 				log.vdebug("Evaluation against 'sync_list' result: direct match but to be excluded");
 				finalResult = true;
+				// do not set excludeMatched = true here, otherwise parental path also gets excluded
 			}
 		}
 		
@@ -279,8 +295,9 @@ private bool isPathExcluded(string path, string[] allowedPaths)
 				log.vdebug("Evaluation against 'sync_list' result: parental path match");
 				finalResult = false;
 			} else {
-				log.vdebug("Evaluation against 'sync_list' result: parental path match but to be excluded");
+				log.vdebug("Evaluation against 'sync_list' result: parental path match but must be excluded");
 				finalResult = true;
+				excludeMatched = true;
 			}
 		}
 		
@@ -292,11 +309,13 @@ private bool isPathExcluded(string path, string[] allowedPaths)
 			auto allowedMask = regex(regexCompatiblePath);
 			if (matchAll(path, allowedMask)) {
 				// regex wildcard evaluation matches
-				if (!exclude) {
+				// if we have a prior pattern match for an exclude, excludeMatched = true
+				if (!exclude && !excludeMatched) {
+					// nothing triggered an exclusion before evaluation against wildcard match attempt
 					log.vdebug("Evaluation against 'sync_list' result: wildcard pattern match");
 					finalResult = false;
 				} else {
-					log.vdebug("Evaluation against 'sync_list' result: wildcard pattern match but to be excluded");
+					log.vdebug("Evaluation against 'sync_list' result: wildcard pattern matched but must be excluded");
 					finalResult = true;
 				}
 			}
